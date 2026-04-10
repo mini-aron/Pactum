@@ -1,5 +1,8 @@
 node_modules/
 dist/
+
+# pnpm monorepo — npm으로 생성된 package-lock.json 제외
+**/package-lock.json
 *.local
 .DS_Store
 *.log

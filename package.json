@@ -3,6 +3,15 @@
   "private": true,
   "version": "0.0.0",
   "description": "Pactum electronic contract library monorepo",
+  "license": "MIT",
+  "keywords": [
+    "contracts",
+    "pdf",
+    "canvas",
+    "react",
+    "typescript",
+    "e-signature"
+  ],
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm -r dev",

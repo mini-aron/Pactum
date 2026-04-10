@@ -2,6 +2,15 @@
   "name": "@pactum/pactum_react",
   "version": "0.0.1",
   "description": "React UI for Pactum electronic contract documents",
+  "license": "MIT",
+  "keywords": [
+    "contracts",
+    "react",
+    "canvas",
+    "pdf",
+    "form-builder",
+    "e-signature"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -17,6 +26,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": [
     "./dist/index.js",
     "./dist/index.cjs"

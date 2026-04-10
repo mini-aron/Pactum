@@ -45,7 +45,7 @@ export const setSharedFieldValue = (
 
   if (!sourceExists) {
     throw new Error(
-      `공유 키 "${sharedKey}"에 source 필드가 없어 값을 설정할 수 없습니다.`
+      `Cannot set shared value: no source field exists for key "${sharedKey}".`
     );
   }
 

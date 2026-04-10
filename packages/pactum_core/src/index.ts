@@ -1,3 +1,22 @@
+/**
+ * @pactum/pactum_core — Framework-agnostic electronic contract document engine.
+ *
+ * **Document & fields**
+ * - Types: {@link ContractField}, {@link ContractFieldValue}, {@link ContractDocument}
+ *
+ * **Coordinates:** {@link normalizeRect}, {@link toAbsoluteRect}, {@link toNormalizedRect}, {@link clampToPage}, …
+ *
+ * **Shared fields:** {@link resolveFieldValue}, {@link setSharedFieldValue}, {@link getSourceField}, {@link getMirrorFields}, {@link resolveAllSharedValues}
+ *
+ * **Validation:** {@link validateField}, {@link validateDocument}, {@link validateSharedFieldGroup}
+ *
+ * **Immutable operations:** {@link createDocument}, {@link createField}, {@link updateField}, {@link removeField}, {@link moveField}, {@link resizeField}, {@link setFieldValue}, {@link getResolvedFieldValue}, {@link getResolvedValues}
+ *
+ * `getResolvedValues` builds a map of field id → resolved value in one pass (for UI or export).
+ *
+ * **Export:** {@link exportToPdf}
+ */
+
 export type {
   ContractFieldType,
   SharedMode,

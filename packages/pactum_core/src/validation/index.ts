@@ -35,7 +35,7 @@ const validateStringValue = (
     errors.push(
       makeError(
         field,
-        `최소 ${validation.minLength}자 이상 입력해야 합니다.`,
+        `Must be at least ${validation.minLength} characters.`,
         'MIN_LENGTH'
       )
     );
@@ -45,7 +45,7 @@ const validateStringValue = (
     errors.push(
       makeError(
         field,
-        `최대 ${validation.maxLength}자까지 입력할 수 있습니다.`,
+        `Must be at most ${validation.maxLength} characters.`,
         'MAX_LENGTH'
       )
     );
@@ -54,7 +54,7 @@ const validateStringValue = (
   if (validation.pattern !== undefined) {
     const regex = new RegExp(validation.pattern);
     if (!regex.test(value)) {
-      errors.push(makeError(field, '형식이 올바르지 않습니다.', 'PATTERN_MISMATCH'));
+      errors.push(makeError(field, 'The value does not match the required format.', 'PATTERN_MISMATCH'));
     }
   }
 
@@ -70,13 +70,13 @@ const validateNumberValue = (
 
   if (numField.min !== undefined && value < numField.min) {
     errors.push(
-      makeError(field, `최솟값은 ${numField.min}입니다.`, 'MIN_VALUE')
+      makeError(field, `Minimum value is ${numField.min}.`, 'MIN_VALUE')
     );
   }
 
   if (numField.max !== undefined && value > numField.max) {
     errors.push(
-      makeError(field, `최댓값은 ${numField.max}입니다.`, 'MAX_VALUE')
+      makeError(field, `Maximum value is ${numField.max}.`, 'MAX_VALUE')
     );
   }
 
@@ -100,7 +100,7 @@ export const validateField = (
     (typeof value === 'boolean' && !value && field.type !== 'checkbox');
 
   if (field.required && isEmpty) {
-    errors.push(makeError(field, '필수 입력 항목입니다.', 'REQUIRED'));
+    errors.push(makeError(field, 'This field is required.', 'REQUIRED'));
     return { valid: false, errors };
   }
 
@@ -114,7 +114,7 @@ export const validateField = (
     errors.push(...validateNumberValue(field, value));
   } else if (isSignatureValue(value) || isStampValue(value)) {
     if (!(value.image instanceof Uint8Array) || value.image.length === 0) {
-      errors.push(makeError(field, '이미지 데이터가 올바르지 않습니다.', 'INVALID_TYPE'));
+      errors.push(makeError(field, 'Image data is invalid.', 'INVALID_TYPE'));
     }
   }
 
@@ -137,7 +137,7 @@ export const validateSharedFieldGroup = (
         {
           fieldId: sharedKey,
           fieldName: sharedKey,
-          message: `공유 키 "${sharedKey}"에 source 필드가 없습니다.`,
+          message: `No source field found for shared key "${sharedKey}".`,
           code: 'SHARED_SOURCE_NOT_FOUND',
         },
       ],

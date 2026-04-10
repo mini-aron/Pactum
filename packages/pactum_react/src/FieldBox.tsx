@@ -2,14 +2,17 @@ import type { ContractDocument } from '@pactum/pactum_core';
 import {
   getResolvedFieldValue,
   moveField,
+  removeField,
   resizeField,
   setFieldValue,
   type ContractField,
   type ContractFieldValue,
 } from '@pactum/pactum_core';
 import {
+  useEffect,
   useCallback,
   useMemo,
+  useId,
   useRef,
   useState,
   type RefObject,
@@ -31,6 +34,15 @@ const badge = (field: ContractField): string | null => {
   return field.sharedMode === 'source' ? 'source' : 'mirror';
 };
 
+const MIN_SIZE = 0.01;
+const CONTROL_SIZE = 13;
+
+const getFieldBackground = (field: ContractField): string => {
+  if (field.type === 'checkbox') return 'rgba(16, 185, 129, 0.09)';
+  if (field.type === 'signature' || field.type === 'stamp') return 'rgba(99, 102, 241, 0.09)';
+  return 'rgba(59, 130, 246, 0.07)';
+};
+
 export function FieldBox({
   field,
   document,
@@ -38,7 +50,11 @@ export function FieldBox({
   onDocumentChange,
   pageOverlayRef,
 }: FieldBoxProps): JSX.Element {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const labelId = useId();
   const resolved = getResolvedFieldValue(document, field.id);
+  const [isSelected, setIsSelected] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const [preview, setPreview] = useState<{
     x: number;
     y: number;
@@ -52,6 +68,30 @@ export function FieldBox({
     width: field.width,
     height: field.height,
   };
+  const effectiveRect =
+    field.type === 'checkbox'
+      ? { ...rect, width: Math.min(rect.width, rect.height), height: Math.min(rect.width, rect.height) }
+      : rect;
+  const textSize =
+    'textSize' in field && typeof field.textSize === 'number' ? field.textSize : 10;
+  const borderRadius =
+    'borderRadius' in field && typeof field.borderRadius === 'number'
+      ? Math.max(0, Math.min(24, field.borderRadius))
+      : 4;
+
+  useEffect(() => {
+    if (mode !== 'builder' || !isSelected) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (rootRef.current?.contains(target)) return;
+      setIsSelected(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [isSelected, mode]);
 
   const trySetValue = useCallback(
     (value: ContractFieldValue) => {
@@ -121,11 +161,21 @@ export function FieldBox({
       if (ev.pointerId !== e.pointerId) return;
       const dw = (ev.clientX - start.cx) / r.width;
       const dh = (ev.clientY - start.cy) / r.height;
+      if (field.type === 'checkbox') {
+        const side = Math.max(MIN_SIZE, start.ow + dw, start.oh + dh);
+        setPreview({
+          x: field.x,
+          y: field.y,
+          width: side,
+          height: side,
+        });
+        return;
+      }
       setPreview({
         x: field.x,
         y: field.y,
-        width: start.ow + dw,
-        height: start.oh + dh,
+        width: Math.max(MIN_SIZE, start.ow + dw),
+        height: Math.max(MIN_SIZE, start.oh + dh),
       });
     };
     const onUp = (ev: PointerEvent) => {
@@ -136,10 +186,20 @@ export function FieldBox({
       const dw = (ev.clientX - start.cx) / r.width;
       const dh = (ev.clientY - start.cy) / r.height;
       setPreview(null);
+      if (field.type === 'checkbox') {
+        const side = Math.max(MIN_SIZE, start.ow + dw, start.oh + dh);
+        onDocumentChange(
+          resizeField(document, field.id, {
+            width: side,
+            height: side,
+          })
+        );
+        return;
+      }
       onDocumentChange(
         resizeField(document, field.id, {
-          width: start.ow + dw,
-          height: start.oh + dh,
+          width: Math.max(MIN_SIZE, start.ow + dw),
+          height: Math.max(MIN_SIZE, start.oh + dh),
         })
       );
     };
@@ -157,12 +217,26 @@ export function FieldBox({
     if (!canEditValue) return null;
     if (field.type === 'checkbox') {
       return (
-        <input
-          type="checkbox"
-          checked={resolved === true}
-          onChange={(ev) => trySetValue(ev.target.checked)}
+        <button
+          type="button"
           aria-label={field.name}
-        />
+          onClick={() => trySetValue(resolved === true ? false : true)}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            background: 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: textSize + 6,
+            color: '#0f766e',
+            padding: 0,
+          }}
+        >
+          {resolved === true ? '✓' : ''}
+        </button>
       );
     }
     if (field.type === 'textarea') {
@@ -172,41 +246,21 @@ export function FieldBox({
           onChange={(ev) => trySetValue(ev.target.value)}
           placeholder={field.placeholder}
           rows={field.rows ?? 3}
-          style={{ width: '100%', height: '100%', boxSizing: 'border-box', fontSize: 10 }}
+          required={field.required}
+          style={{
+            width: '100%',
+            height: '100%',
+            boxSizing: 'border-box',
+            fontSize: textSize,
+            padding: 4,
+            border: 'none',
+            background: 'transparent',
+            resize: 'none',
+            outline: 'none',
+            color: '#0f172a',
+            lineHeight: 1.35,
+          }}
         />
-      );
-    }
-    if (field.type === 'select') {
-      return (
-        <select
-          value={typeof resolved === 'string' ? resolved : ''}
-          onChange={(ev) => trySetValue(ev.target.value)}
-          style={{ width: '100%', fontSize: 10 }}
-        >
-          <option value="">Select…</option>
-          {field.options.map((o: { value: string; label: string }) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      );
-    }
-    if (field.type === 'radio') {
-      return (
-        <div style={{ fontSize: 9 }}>
-          {field.options.map((o: { value: string; label: string }) => (
-            <label key={o.value} style={{ display: 'block' }}>
-              <input
-                type="radio"
-                name={field.id}
-                checked={resolved === o.value}
-                onChange={() => trySetValue(o.value)}
-              />{' '}
-              {o.label}
-            </label>
-          ))}
-        </div>
       );
     }
     return (
@@ -233,11 +287,22 @@ export function FieldBox({
             trySetValue(Number.isFinite(n) ? n : 0);
           } else trySetValue(ev.target.value);
         }}
+        required={field.required}
         placeholder={field.placeholder}
-        style={{ width: '100%', fontSize: 10 }}
+        style={{
+          width: '100%',
+          height: '100%',
+          fontSize: textSize,
+          boxSizing: 'border-box',
+          padding: '0 4px',
+          border: 'none',
+          background: 'transparent',
+          outline: 'none',
+          color: '#0f172a',
+        }}
       />
     );
-  }, [canEditValue, field, resolved, trySetValue]);
+  }, [canEditValue, field, resolved, textSize, trySetValue]);
 
   const signatureRef = useRef<SignatureCanvas>(null);
 
@@ -301,65 +366,176 @@ export function FieldBox({
         : '';
 
   const b = badge(field);
+  const labelText = field.label ?? field.name;
+  const requiredMark = field.required ? ' *' : '';
+  const sharedHoverText =
+    field.sharedKey && b
+      ? `[${field.sharedKey}] ${b === 'source' ? 'Source' : 'Mirror'}`
+      : null;
 
   return (
     <div
       data-field-id={field.id}
+      ref={rootRef}
       style={{
         position: 'absolute',
-        left: `${rect.x * 100}%`,
-        top: `${rect.y * 100}%`,
-        width: `${rect.width * 100}%`,
-        height: `${rect.height * 100}%`,
+        left: `${effectiveRect.x * 100}%`,
+        top: `${effectiveRect.y * 100}%`,
+        width: `${effectiveRect.width * 100}%`,
+        height: `${effectiveRect.height * 100}%`,
         boxSizing: 'border-box',
-        border:
-          mode === 'builder'
-            ? '1px dashed rgba(0,80,200,0.7)'
-            : '1px solid rgba(0,0,0,0.15)',
-        background: 'rgba(255,255,255,0.4)',
-        overflow: 'hidden',
+        overflow: 'visible',
         cursor: mode === 'builder' ? 'move' : 'default',
       }}
-      onPointerDown={mode === 'builder' ? onDragPointerDown : undefined}
+      onPointerDown={
+        mode === 'builder'
+          ? (e) => {
+              setIsSelected(true);
+              onDragPointerDown(e);
+            }
+          : undefined
+      }
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
     >
-      {b ? (
+      <span
+        id={labelId}
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          transform: 'translateY(-100%)',
+          fontSize: 8,
+          lineHeight: 1,
+          color: '#334155',
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {`${labelText}${requiredMark}`}
+      </span>
+      {sharedHoverText && isHovered ? (
         <span
-          title={field.sharedKey}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            transform: 'translateY(calc(-100% - 11px))',
+            fontSize: 8,
+            lineHeight: 1,
+            color: '#2563eb',
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: 3,
+            padding: '1px 4px',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {sharedHoverText}
+        </span>
+      ) : null}
+      {mode === 'builder' ? (
+        <button
+          type="button"
+          aria-label={`Delete field ${field.name}`}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            setIsSelected(true);
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDocumentChange(removeField(document, field.id));
+          }}
           style={{
             position: 'absolute',
             top: 0,
             right: 0,
+            transform: 'translate(50%, -50%)',
+            width: CONTROL_SIZE,
+            height: CONTROL_SIZE,
+            borderRadius: 4,
+            border: '1px solid rgba(220, 38, 38, 0.35)',
+            background: 'rgba(254, 226, 226, 0.95)',
+            color: '#b91c1c',
             fontSize: 8,
-            padding: '1px 3px',
-            background: b === 'source' ? '#1a73e8' : '#5f6368',
-            color: '#fff',
-            zIndex: 2,
-            pointerEvents: 'none',
+            lineHeight: 1,
+            cursor: 'pointer',
+            zIndex: 4,
+            padding: 0,
+            transition: 'transform 120ms ease, background-color 120ms ease',
           }}
         >
-          {b}
-        </span>
+          ×
+        </button>
       ) : null}
-      {stampBlock}
-      {signatureBlock}
-      {!stampBlock && !signatureBlock && input}
-      {!stampBlock && !signatureBlock && !input && (
-        <span style={{ fontSize: 10, pointerEvents: 'none' }}>{displayText}</span>
-      )}
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          border:
+            mode === 'builder'
+              ? isSelected
+                ? '1px solid rgba(37, 99, 235, 0.95)'
+                : '1px dashed rgba(37, 99, 235, 0.7)'
+              : '1px solid rgba(148, 163, 184, 0.45)',
+          background: getFieldBackground(field),
+          borderRadius,
+          overflow: 'hidden',
+          boxSizing: 'border-box',
+          transition:
+            'border-color 160ms ease, transform 160ms ease, background-color 160ms ease',
+          transform: isSelected ? 'scale(1.01)' : 'scale(1)',
+        }}
+      >
+        {stampBlock}
+        {signatureBlock}
+        {!stampBlock && !signatureBlock && input}
+        {!stampBlock && !signatureBlock && !input && (
+          <span
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: field.type === 'checkbox' ? textSize + 6 : textSize,
+              color: '#0f172a',
+              pointerEvents: 'none',
+            }}
+          >
+            {displayText}
+          </span>
+        )}
+      </div>
       {mode === 'builder' ? (
         <div
-          onPointerDown={onResizePointerDown}
+          onPointerDown={(e) => {
+            setIsSelected(true);
+            onResizePointerDown(e);
+          }}
           style={{
             position: 'absolute',
             right: 0,
             bottom: 0,
-            width: 8,
-            height: 8,
-            background: '#1a73e8',
+            transform: 'translate(50%, 50%)',
+            width: CONTROL_SIZE,
+            height: CONTROL_SIZE,
+            background: 'rgba(59, 130, 246, 0.95)',
+            border: '1px solid rgba(255,255,255,0.95)',
+            borderRadius: 4,
+            color: '#fff',
+            fontSize: 9,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             cursor: 'nwse-resize',
             zIndex: 3,
           }}
-        />
+        >
+          ↘
+        </div>
       ) : null}
     </div>
   );

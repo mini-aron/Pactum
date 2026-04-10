@@ -6,7 +6,7 @@ import {
   type PDFFont,
 } from 'pdf-lib';
 import type { ContractDocument } from '../types/document';
-import type { ContractField } from '../types/field';
+import type { ContractField, RadioField, SelectField } from '../types/field';
 import type { ContractFieldValue } from '../types/value';
 import { isSignatureValue, isStampValue } from '../types/value';
 import { resolveFieldValue } from '../shared';
@@ -21,6 +21,19 @@ const getPageDimension = (page: PDFPage): PageDimension => ({
   width: page.getWidth(),
   height: page.getHeight(),
 });
+
+/** For radio/select fields, render the option label in the PDF instead of the stored value. */
+const formatStringForPdf = (field: ContractField, raw: string): string => {
+  if (field.type === 'radio') {
+    const opt = (field as RadioField).options.find((o) => o.value === raw);
+    return opt?.label ?? raw;
+  }
+  if (field.type === 'select') {
+    const opt = (field as SelectField).options.find((o) => o.value === raw);
+    return opt?.label ?? raw;
+  }
+  return raw;
+};
 
 const drawTextField = (
   page: PDFPage,
@@ -127,7 +140,7 @@ const renderField = async (
   }
 
   if (typeof value === 'string' && value.trim() !== '') {
-    drawTextField(page, field, value, font, pageDim);
+    drawTextField(page, field, formatStringForPdf(field, value), font, pageDim);
     return;
   }
 
@@ -136,18 +149,15 @@ const renderField = async (
   }
 };
 
-export interface ExportOptions {
-  readonly embedFonts?: boolean;
-}
+/** Reserved for future export options (e.g. custom fonts). Field text currently uses embedded Helvetica. */
+export type ExportOptions = Record<string, never>;
 
 export const exportToPdf = async (
   document: ContractDocument,
-  options: ExportOptions = {}
+  _options: ExportOptions = {}
 ): Promise<Uint8Array> => {
   const pdfDoc = await PDFDocument.load(document.pdfData);
-  const font = await pdfDoc.embedFont(
-    options.embedFonts !== false ? StandardFonts.Helvetica : StandardFonts.Helvetica
-  );
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   const pages = pdfDoc.getPages();
 

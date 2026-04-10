@@ -1,7 +1,8 @@
 node_modules/
 dist/
+storybook-static/
 
-# pnpm monorepo — npm으로 생성된 package-lock.json 제외
+# pnpm monorepo — ignore npm-generated package-lock.json
 **/package-lock.json
 *.local
 .DS_Store

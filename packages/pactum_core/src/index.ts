@@ -22,7 +22,6 @@ export type {
   SharedMode,
   BaseField,
   TextField,
-  NameField,
   DateField,
   CheckboxField,
   SignatureField,
@@ -31,10 +30,6 @@ export type {
   PhoneField,
   NumberField,
   TextareaField,
-  RadioField,
-  RadioOption,
-  SelectField,
-  SelectOption,
   ContractField,
 } from './types/field';
 

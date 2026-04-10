@@ -2,7 +2,6 @@ import type { FieldValidation } from './validation';
 
 export type ContractFieldType =
   | 'text'
-  | 'name'
   | 'date'
   | 'checkbox'
   | 'signature'
@@ -10,9 +9,7 @@ export type ContractFieldType =
   | 'email'
   | 'phone'
   | 'number'
-  | 'textarea'
-  | 'radio'
-  | 'select';
+  | 'textarea';
 
 export type SharedMode = 'source' | 'mirror';
 
@@ -26,6 +23,8 @@ export interface BaseField {
   readonly width: number;
   readonly height: number;
   readonly label?: string;
+  readonly textSize?: number;
+  readonly borderRadius?: number;
   readonly required?: boolean;
   readonly placeholder?: string;
   readonly readonly?: boolean;
@@ -39,10 +38,6 @@ export interface BaseField {
 export interface TextField extends BaseField {
   readonly type: 'text';
   readonly maxLength?: number;
-}
-
-export interface NameField extends BaseField {
-  readonly type: 'name';
 }
 
 export interface DateField extends BaseField {
@@ -83,31 +78,8 @@ export interface TextareaField extends BaseField {
   readonly rows?: number;
 }
 
-export interface RadioField extends BaseField {
-  readonly type: 'radio';
-  readonly options: readonly RadioOption[];
-  readonly groupKey?: string;
-}
-
-export interface RadioOption {
-  readonly value: string;
-  readonly label: string;
-}
-
-export interface SelectField extends BaseField {
-  readonly type: 'select';
-  readonly options: readonly SelectOption[];
-  readonly multiple?: boolean;
-}
-
-export interface SelectOption {
-  readonly value: string;
-  readonly label: string;
-}
-
 export type ContractField =
   | TextField
-  | NameField
   | DateField
   | CheckboxField
   | SignatureField
@@ -115,6 +87,4 @@ export type ContractField =
   | EmailField
   | PhoneField
   | NumberField
-  | TextareaField
-  | RadioField
-  | SelectField;
+  | TextareaField;

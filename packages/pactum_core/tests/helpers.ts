@@ -19,14 +19,17 @@ export const createTestDocumentInput = async (): Promise<CreateDocumentInput> =>
   };
 };
 
-export const textField = (overrides: Partial<TextField> & Pick<TextField, 'id'>): TextField => ({
-  id: overrides.id,
-  name: overrides.name ?? 'f',
-  type: 'text',
-  page: overrides.page ?? 0,
-  x: overrides.x ?? 0.1,
-  y: overrides.y ?? 0.1,
-  width: overrides.width ?? 0.2,
-  height: overrides.height ?? 0.05,
-  ...overrides,
-});
+export const textField = (overrides: Partial<TextField> & Pick<TextField, 'id'>): TextField => {
+  const { id, type: _ignoreType, ...rest } = overrides;
+  return {
+    ...rest,
+    id,
+    type: 'text',
+    name: rest.name ?? 'f',
+    page: rest.page ?? 0,
+    x: rest.x ?? 0.1,
+    y: rest.y ?? 0.1,
+    width: rest.width ?? 0.2,
+    height: rest.height ?? 0.05,
+  };
+};

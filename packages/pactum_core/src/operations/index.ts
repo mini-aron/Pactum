@@ -8,6 +8,22 @@ import type { ContractDocument, CreateDocumentInput } from '../types/document';
 import { normalizeRect } from '../coordinates';
 import { resolveFieldValue, setSharedFieldValue } from '../shared';
 
+const assertAtMostOneSourcePerSharedKey = (
+  fields: readonly ContractField[]
+): void => {
+  const sourceIdByKey = new Map<string, string>();
+  for (const f of fields) {
+    if (!f.sharedKey || f.sharedMode !== 'source') continue;
+    const prev = sourceIdByKey.get(f.sharedKey);
+    if (prev !== undefined) {
+      throw new Error(
+        `Shared key "${f.sharedKey}" allows only one source field. (Conflict: "${prev}" vs "${f.id}")`
+      );
+    }
+    sourceIdByKey.set(f.sharedKey, f.id);
+  }
+};
+
 export const createDocument = (input: CreateDocumentInput): ContractDocument => ({
   ...input,
   fields: [],
@@ -24,9 +40,12 @@ export const createField = (
   const normalized = normalizeRect(field, document.pageCount);
   const newField: ContractField = { ...field, ...normalized };
 
+  const fields = [...document.fields, newField];
+  assertAtMostOneSourcePerSharedKey(fields);
+
   return {
     ...document,
-    fields: [...document.fields, newField],
+    fields,
     updatedAt: new Date().toISOString(),
   };
 };
@@ -43,6 +62,8 @@ export const updateField = (
     const normalized = normalizeRect(merged, document.pageCount);
     return { ...merged, ...normalized } as ContractField;
   });
+
+  assertAtMostOneSourcePerSharedKey(fields);
 
   return {
     ...document,
@@ -116,13 +137,17 @@ export const setFieldValue = (
   const field = document.fields.find((f) => f.id === fieldId);
 
   if (!field) {
-    throw new Error(`필드 ID "${fieldId}"를 찾을 수 없습니다.`);
+    throw new Error(`Field ID "${fieldId}" was not found.`);
   }
 
   if (field.sharedMode === 'mirror') {
     throw new Error(
-      `mirror 필드 "${fieldId}"에는 직접 값을 설정할 수 없습니다. source 필드를 통해 값을 설정하세요.`
+      `Cannot set value on mirror field "${fieldId}". Set the value on the source field instead.`
     );
+  }
+
+  if (field.readonly) {
+    throw new Error(`Cannot set value on read-only field "${fieldId}".`);
   }
 
   if (field.sharedKey && field.sharedMode === 'source') {

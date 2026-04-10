@@ -1,108 +1,66 @@
-import type { ContractDocument, ContractField } from '@pactum/pactum_core';
-import { useMemo, useRef, useState } from 'react';
-import { Document, Page } from 'react-pdf';
-import type { DocumentProps } from 'react-pdf';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
+import type { ContractDocument } from '@pactum/pactum_core';
+import { useEffect, useState } from 'react';
 import type { ContractMode } from './ContractMode';
-import { FieldBox } from './FieldBox';
+import { ContractCanvasPages } from './ContractCanvasPages';
+import { loadRenderedPages, type RenderedPage } from './pageSource';
 
-/** Same as `react-pdf` `<Document file={…} />` (pdf.js source). */
-export type PdfFileSource = NonNullable<DocumentProps['file']>;
+/**
+ * @deprecated Kept for compatibility. Prefer `ContractCanvasPages`.
+ * `file` is ignored and pages are resolved from `document` internally.
+ */
+export type PdfFileSource = unknown;
 
 export interface ContractPdfPagesProps {
-  readonly file: PdfFileSource | null;
+  readonly file?: PdfFileSource | null;
   readonly document: ContractDocument;
   readonly mode: ContractMode;
   readonly onDocumentChange: (next: ContractDocument) => void;
   readonly pageWidth?: number;
+  readonly zoom?: number;
 }
 
 export function ContractPdfPages({
-  file,
   document,
   mode,
   onDocumentChange,
   pageWidth = 720,
+  zoom = 1,
 }: ContractPdfPagesProps): JSX.Element {
-  const [numPages, setNumPages] = useState(0);
+  const pageImages =
+    'pageImages' in document ? document.pageImages : undefined;
+  const [pages, setPages] = useState<RenderedPage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const pages = useMemo(() => {
-    return Array.from({ length: numPages }, (_, i) => i);
-  }, [numPages]);
+  useEffect(() => {
+    let alive = true;
+    setIsLoading(true);
+    void loadRenderedPages(document)
+      .then((nextPages) => {
+        if (!alive) return;
+        setPages(nextPages);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setIsLoading(false);
+      });
 
-  if (file === null) {
-    return <span style={{ padding: 8 }}>No PDF</span>;
+    return () => {
+      alive = false;
+    };
+  }, [pageImages, document.pdfData]);
+
+  if (isLoading && pages.length === 0) {
+    return <span style={{ padding: 8 }}>Loading pages…</span>;
   }
 
   return (
-    <Document
-      file={file}
-      onLoadSuccess={({ numPages: n }) => setNumPages(n)}
-      loading={<span style={{ padding: 8 }}>Loading PDF…</span>}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {pages.map((pageIndex) => (
-          <PageWithFields
-            key={pageIndex}
-            pageIndex={pageIndex}
-            pageWidth={pageWidth}
-            document={document}
-            mode={mode}
-            onDocumentChange={onDocumentChange}
-          />
-        ))}
-      </div>
-    </Document>
-  );
-}
-
-function PageWithFields({
-  pageIndex,
-  pageWidth,
-  document,
-  mode,
-  onDocumentChange,
-}: {
-  readonly pageIndex: number;
-  readonly pageWidth: number;
-  readonly document: ContractDocument;
-  readonly mode: ContractMode;
-  readonly onDocumentChange: (next: ContractDocument) => void;
-}): JSX.Element {
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const fields = document.fields.filter((f: ContractField) => f.page === pageIndex);
-
-  return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
-      <Page
-        pageNumber={pageIndex + 1}
-        width={pageWidth}
-        renderTextLayer={false}
-        renderAnnotationLayer={false}
-      />
-      <div
-        ref={overlayRef}
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: mode === 'readonly' ? 'none' : 'auto',
-        }}
-      >
-        {fields.map((field: ContractField) => (
-          <FieldBox
-            key={field.id}
-            field={field}
-            document={document}
-            mode={mode}
-            onDocumentChange={onDocumentChange}
-            pageOverlayRef={overlayRef}
-          />
-        ))}
-      </div>
-    </div>
+    <ContractCanvasPages
+      pages={pages}
+      document={document}
+      mode={mode}
+      onDocumentChange={onDocumentChange}
+      pageWidth={pageWidth}
+      zoom={zoom}
+    />
   );
 }

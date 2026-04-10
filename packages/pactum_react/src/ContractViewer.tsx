@@ -2,40 +2,46 @@ import type { ContractDocument } from '@pactum/pactum_core';
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from 'react';
 import type { ContractMode } from './ContractMode';
-import { ContractPdfPages } from './ContractPdfPages';
+import { ContractCanvasPages } from './ContractCanvasPages';
 import { configurePdfWorker } from './configurePdfWorker';
+import { loadRenderedPages, type RenderedPage } from './pageSource';
 
 export interface ContractViewerProps {
   readonly mode: ContractMode;
   readonly document: ContractDocument;
   readonly onDocumentChange: (next: ContractDocument) => void;
   readonly pageWidth?: number;
+  readonly viewportHeight?: number | string;
   readonly pdfWorkerSrc?: string;
   className?: string;
   style?: CSSProperties;
 }
 
 /**
- * PDF preview with field overlays. The parent owns `ContractDocument` state and passes
- * updates from core operations via `onDocumentChange`.
+ * Canvas-based contract page viewer with field overlays.
+ * The parent owns `ContractDocument` state and passes updates via `onDocumentChange`.
  */
 export function ContractViewer({
   mode,
   document,
   onDocumentChange,
   pageWidth,
+  viewportHeight = '80vh',
   pdfWorkerSrc,
   className,
   style,
 }: ContractViewerProps): JSX.Element {
+  const pageImages =
+    'pageImages' in document ? document.pageImages : undefined;
   const [zoom, setZoom] = useState(1);
+  const [pages, setPages] = useState<RenderedPage[]>([]);
+  const [isLoadingPages, setIsLoadingPages] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
   const panRef = useRef({
@@ -50,21 +56,39 @@ export function ContractViewer({
     configurePdfWorker(pdfWorkerSrc);
   }, [pdfWorkerSrc]);
 
-  const file = useMemo(
-    () => ({ data: document.pdfData }),
-    [document.pdfData]
-  );
+  useEffect(() => {
+    let alive = true;
+    setIsLoadingPages(true);
+
+    void loadRenderedPages(document)
+      .then((nextPages) => {
+        if (!alive) return;
+        setPages(nextPages);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setIsLoadingPages(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [pageImages, document.pdfData]);
 
   const basePageWidth = pageWidth ?? 720;
   const scaledPageWidth = Math.round(basePageWidth * zoom);
 
-  const onZoomIn = useCallback(() => {
-    setZoom((prev) => Math.min(2, Number((prev + 0.1).toFixed(2))));
+  const clampZoom = useCallback((value: number) => {
+    return Math.max(0.5, Math.min(2, Number(value.toFixed(2))));
   }, []);
 
+  const onZoomIn = useCallback(() => {
+    setZoom((prev) => clampZoom(prev + 0.1));
+  }, [clampZoom]);
+
   const onZoomOut = useCallback(() => {
-    setZoom((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(2))));
-  }, []);
+    setZoom((prev) => clampZoom(prev - 0.1));
+  }, [clampZoom]);
 
   const onZoomReset = useCallback(() => {
     setZoom(1);
@@ -72,13 +96,16 @@ export function ContractViewer({
 
   const onViewportPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (zoom <= 1) return;
+      const viewport = viewportRef.current;
+      if (!viewport) return;
       if (event.button !== 0) return;
       const target = event.target as HTMLElement;
       if (target.closest('[data-field-id]')) return;
-
-      const viewport = viewportRef.current;
-      if (!viewport) return;
+      const canPan =
+        viewport.scrollWidth > viewport.clientWidth ||
+        viewport.scrollHeight > viewport.clientHeight;
+      if (!canPan) return;
+      event.preventDefault();
 
       panRef.current = {
         pointerId: event.pointerId,
@@ -90,7 +117,7 @@ export function ContractViewer({
       setIsPanning(true);
       viewport.setPointerCapture(event.pointerId);
     },
-    [zoom]
+    []
   );
 
   const onViewportPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -117,7 +144,16 @@ export function ContractViewer({
   }, []);
 
   return (
-    <div className={className} style={style}>
+    <div
+      className={className}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: viewportHeight,
+        minHeight: 0,
+        ...style,
+      }}
+    >
       <div
         style={{
           display: 'flex',
@@ -141,39 +177,39 @@ export function ContractViewer({
             border: '1px solid rgba(148, 163, 184, 0.35)',
           }}
         >
-        <RoundIconButton
-          ariaLabel="Zoom out"
-          onClick={onZoomOut}
-          disabled={zoom <= 0.5}
-        >
-          <MinusIcon />
-        </RoundIconButton>
-        <button
-          type="button"
-          onClick={onZoomReset}
-          style={{
-            minWidth: 56,
-            height: 30,
-            borderRadius: 999,
-            border: '1px solid rgba(148, 163, 184, 0.35)',
-            background: 'rgba(248, 250, 252, 0.9)',
-            color: '#0f172a',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: 'pointer',
-            letterSpacing: 0.2,
-          }}
-          aria-label="Reset zoom"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <RoundIconButton
-          ariaLabel="Zoom in"
-          onClick={onZoomIn}
-          disabled={zoom >= 2}
-        >
-          <PlusIcon />
-        </RoundIconButton>
+          <RoundIconButton
+            ariaLabel="Zoom out"
+            onClick={onZoomOut}
+            disabled={zoom <= 0.5}
+          >
+            <MinusIcon />
+          </RoundIconButton>
+          <button
+            type="button"
+            onClick={onZoomReset}
+            style={{
+              minWidth: 56,
+              height: 30,
+              borderRadius: 999,
+              border: '1px solid rgba(148, 163, 184, 0.35)',
+              background: 'rgba(248, 250, 252, 0.9)',
+              color: '#0f172a',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              letterSpacing: 0.2,
+            }}
+            aria-label="Reset zoom"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <RoundIconButton
+            ariaLabel="Zoom in"
+            onClick={onZoomIn}
+            disabled={zoom >= 2}
+          >
+            <PlusIcon />
+          </RoundIconButton>
         </div>
       </div>
       <div
@@ -182,18 +218,29 @@ export function ContractViewer({
         onPointerMove={onViewportPointerMove}
         onPointerUp={onViewportPointerUp}
         onPointerCancel={onViewportPointerUp}
+        onPointerLeave={onViewportPointerUp}
         style={{
+          width: '100%',
+          flex: 1,
+          minHeight: 0,
           overflow: 'auto',
           cursor: isPanning ? 'grabbing' : zoom > 1 ? 'grab' : 'default',
+          touchAction: zoom > 1 ? 'none' : 'auto',
+          overscrollBehavior: 'contain',
         }}
       >
-        <ContractPdfPages
-          file={file}
-          document={document}
-          mode={mode}
-          onDocumentChange={onDocumentChange}
-          pageWidth={scaledPageWidth}
-        />
+        {isLoadingPages && pages.length === 0 ? (
+          <span style={{ padding: 8 }}>Loading pages…</span>
+        ) : (
+          <ContractCanvasPages
+            pages={pages}
+            document={document}
+            mode={mode}
+            zoom={zoom}
+            onDocumentChange={onDocumentChange}
+            pageWidth={scaledPageWidth}
+          />
+        )}
       </div>
     </div>
   );

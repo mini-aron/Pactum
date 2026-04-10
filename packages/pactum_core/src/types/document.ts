@@ -19,6 +19,7 @@ export interface ContractDocument {
   readonly id: string;
   readonly title: string;
   readonly pdfData: Uint8Array;
+  readonly pageImages?: readonly Uint8Array[];
   readonly pageCount: number;
   readonly pages: readonly PageInfo[];
   readonly fields: readonly ContractField[];
@@ -32,6 +33,7 @@ export interface CreateDocumentInput {
   readonly id: string;
   readonly title: string;
   readonly pdfData: Uint8Array;
+  readonly pageImages?: readonly Uint8Array[];
   readonly pageCount: number;
   readonly pages: readonly PageInfo[];
 }

@@ -24,6 +24,7 @@ export interface FieldBoxProps {
   readonly field: ContractField;
   readonly document: ContractDocument;
   readonly mode: ContractMode;
+  readonly zoom?: number;
   readonly onDocumentChange: (next: ContractDocument) => void;
   /** Page overlay (normalized coordinates); used to convert drag/resize pixels. */
   readonly pageOverlayRef: RefObject<HTMLDivElement | null>;
@@ -47,6 +48,7 @@ export function FieldBox({
   field,
   document,
   mode,
+  zoom = 1,
   onDocumentChange,
   pageOverlayRef,
 }: FieldBoxProps): JSX.Element {
@@ -74,6 +76,7 @@ export function FieldBox({
       : rect;
   const textSize =
     'textSize' in field && typeof field.textSize === 'number' ? field.textSize : 10;
+  const scaledTextSize = Math.max(8, Math.round(textSize * zoom));
   const borderRadius =
     'borderRadius' in field && typeof field.borderRadius === 'number'
       ? Math.max(0, Math.min(24, field.borderRadius))
@@ -230,7 +233,7 @@ export function FieldBox({
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            fontSize: textSize + 6,
+            fontSize: scaledTextSize + 6,
             color: '#0f766e',
             padding: 0,
           }}
@@ -251,7 +254,7 @@ export function FieldBox({
             width: '100%',
             height: '100%',
             boxSizing: 'border-box',
-            fontSize: textSize,
+            fontSize: scaledTextSize,
             padding: 4,
             border: 'none',
             background: 'transparent',
@@ -292,7 +295,7 @@ export function FieldBox({
         style={{
           width: '100%',
           height: '100%',
-          fontSize: textSize,
+          fontSize: scaledTextSize,
           boxSizing: 'border-box',
           padding: '0 4px',
           border: 'none',
@@ -302,7 +305,7 @@ export function FieldBox({
         }}
       />
     );
-  }, [canEditValue, field, resolved, textSize, trySetValue]);
+  }, [canEditValue, field, resolved, scaledTextSize, trySetValue]);
 
   const signatureRef = useRef<SignatureCanvas>(null);
 
@@ -499,7 +502,8 @@ export function FieldBox({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: field.type === 'checkbox' ? textSize + 6 : textSize,
+              fontSize:
+                field.type === 'checkbox' ? scaledTextSize + 6 : scaledTextSize,
               color: '#0f172a',
               pointerEvents: 'none',
             }}

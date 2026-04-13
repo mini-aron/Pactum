@@ -185,6 +185,10 @@ function CanvasPageWithFields({
           width: '100%',
           height: '100%',
           pointerEvents: mode === 'readonly' ? 'none' : 'auto',
+          cursor:
+            mode === 'builder' && dragCreateType !== null
+              ? 'crosshair'
+              : 'default',
         }}
       >
         {fields.map((field: ContractField) => (

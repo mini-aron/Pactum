@@ -252,7 +252,14 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
           flex: 1,
           minHeight: 0,
           overflow: 'auto',
-          cursor: isPanning ? 'grabbing' : zoom > 1 ? 'grab' : 'default',
+          cursor:
+            mode === 'builder' && dragCreateType !== null
+              ? 'crosshair'
+              : isPanning
+                ? 'grabbing'
+                : zoom > 1
+                  ? 'grab'
+                  : 'default',
           touchAction: zoom > 1 ? 'none' : 'auto',
           overscrollBehavior: 'contain',
         }}

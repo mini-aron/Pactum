@@ -171,6 +171,43 @@ export const setFieldValue = (
   };
 };
 
+export const clearFieldValue = (
+  document: ContractDocument,
+  fieldId: string
+): ContractDocument => {
+  const field = document.fields.find((f) => f.id === fieldId);
+
+  if (!field) {
+    throw new Error(`Field ID "${fieldId}" was not found.`);
+  }
+
+  if (field.sharedMode === 'mirror') {
+    throw new Error(
+      `Cannot clear value on mirror field "${fieldId}". Clear the source field instead.`
+    );
+  }
+
+  if (field.readonly) {
+    throw new Error(`Cannot clear value on read-only field "${fieldId}".`);
+  }
+
+  if (field.sharedKey && field.sharedMode === 'source') {
+    const { [field.sharedKey]: _removed, ...sharedValues } = document.sharedValues;
+    return {
+      ...document,
+      sharedValues,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  const { [fieldId]: _removed, ...fieldValues } = document.fieldValues;
+  return {
+    ...document,
+    fieldValues,
+    updatedAt: new Date().toISOString(),
+  };
+};
+
 export const getResolvedFieldValue = (
   document: ContractDocument,
   fieldId: string

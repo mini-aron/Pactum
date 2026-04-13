@@ -10,7 +10,7 @@
  *
  * **Validation:** {@link validateField}, {@link validateDocument}, {@link validateSharedFieldGroup}
  *
- * **Immutable operations:** {@link createDocument}, {@link createField}, {@link updateField}, {@link removeField}, {@link moveField}, {@link resizeField}, {@link setFieldValue}, {@link getResolvedFieldValue}, {@link getResolvedValues}
+ * **Immutable operations:** {@link createDocument}, {@link createField}, {@link updateField}, {@link removeField}, {@link moveField}, {@link resizeField}, {@link setFieldValue}, {@link clearFieldValue}, {@link getResolvedFieldValue}, {@link getResolvedValues}
  *
  * `getResolvedValues` builds a map of field id → resolved value in one pass (for UI or export).
  *
@@ -88,6 +88,7 @@ export {
   moveField,
   resizeField,
   setFieldValue,
+  clearFieldValue,
   getResolvedFieldValue,
   getResolvedValues,
 } from './operations';

@@ -8,7 +8,7 @@ import {
 import type { ContractDocument } from '../types/document';
 import type { ContractField } from '../types/field';
 import type { ContractFieldValue } from '../types/value';
-import { isSignatureValue, isStampValue } from '../types/value';
+import { isSignatureValue } from '../types/value';
 import { resolveFieldValue } from '../shared';
 import { toAbsoluteRect } from '../coordinates';
 
@@ -107,7 +107,7 @@ const renderField = async (
 ): Promise<void> => {
   if (value === undefined || field.hidden) return;
 
-  if (isSignatureValue(value) || isStampValue(value)) {
+  if (isSignatureValue(value)) {
     await drawImageField(
       page,
       pdfDoc,

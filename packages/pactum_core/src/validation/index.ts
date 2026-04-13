@@ -9,7 +9,7 @@ import type {
   ValidationResult,
 } from '../types/validation';
 import type { ContractDocument } from '../types/document';
-import { isSignatureValue, isStampValue } from '../types/value';
+import { isSignatureValue } from '../types/value';
 import { resolveFieldValue } from '../shared';
 
 const makeError = (
@@ -112,7 +112,7 @@ export const validateField = (
     errors.push(...validateStringValue(field, value));
   } else if (typeof value === 'number') {
     errors.push(...validateNumberValue(field, value));
-  } else if (isSignatureValue(value) || isStampValue(value)) {
+  } else if (isSignatureValue(value)) {
     if (!(value.image instanceof Uint8Array) || value.image.length === 0) {
       errors.push(makeError(field, 'Image data is invalid.', 'INVALID_TYPE'));
     }

@@ -1,12 +1,12 @@
 export type {
   ContractFieldType,
   SharedMode,
+  SignatureInputMode,
   BaseField,
   TextField,
   DateField,
   CheckboxField,
   SignatureField,
-  StampField,
   EmailField,
   PhoneField,
   NumberField,
@@ -16,13 +16,12 @@ export type {
 
 export type {
   SignatureValue,
-  StampValue,
   ContractFieldValue,
   FieldValueMap,
   SharedValueMap,
 } from './value';
 
-export { isSignatureValue, isStampValue, isPrimitiveValue } from './value';
+export { isSignatureValue, isPrimitiveValue } from './value';
 
 export type {
   FieldValidation,

@@ -5,11 +5,12 @@ export type ContractFieldType =
   | 'date'
   | 'checkbox'
   | 'signature'
-  | 'stamp'
   | 'email'
   | 'phone'
   | 'number'
   | 'textarea';
+
+export type SignatureInputMode = 'all' | 'sign-only' | 'stamp-only';
 
 export type SharedMode = 'source' | 'mirror';
 
@@ -51,10 +52,7 @@ export interface CheckboxField extends BaseField {
 
 export interface SignatureField extends BaseField {
   readonly type: 'signature';
-}
-
-export interface StampField extends BaseField {
-  readonly type: 'stamp';
+  readonly signatureMode?: SignatureInputMode;
 }
 
 export interface EmailField extends BaseField {
@@ -83,7 +81,6 @@ export type ContractField =
   | DateField
   | CheckboxField
   | SignatureField
-  | StampField
   | EmailField
   | PhoneField
   | NumberField

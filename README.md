@@ -17,6 +17,8 @@ It ships as a monorepo with a framework-agnostic core and a React viewer.
 - Canvas-based page rendering for stable overlay alignment
 - Image-page first document input, with PDF compatibility path
 - Builder/fill/sign/readonly viewer modes
+- Unified signature field with selectable input policy (`all`, `sign-only`, `stamp-only`)
+- External image injection API for signature/stamp automation
 - TypeScript-first API
 
 ## Requirements
@@ -94,6 +96,51 @@ function Viewer({
   );
 }
 ```
+
+### 3) Signature field mode and external image injection
+
+```ts
+import { createField } from '@pactum/pactum_core';
+import type {
+  ContractViewerHandle,
+  ContractViewerBinaryImageInput,
+} from '@pactum/pactum_react';
+import { useRef } from 'react';
+
+const withSignature = createField(next, {
+  id: 'employeeSignature',
+  name: 'Employee Signature',
+  type: 'signature',
+  signatureMode: 'all', // 'all' | 'sign-only' | 'stamp-only'
+  page: 0,
+  x: 0.1,
+  y: 0.75,
+  width: 0.35,
+  height: 0.12,
+});
+
+const viewerRef = useRef<ContractViewerHandle>(null);
+
+const sharedStampImage: ContractViewerBinaryImageInput = {
+  image: new Uint8Array(), // your service-managed image bytes
+  mimeType: 'image/png',
+};
+
+viewerRef.current?.setStampImage('employeeSignature', sharedStampImage);
+// or
+viewerRef.current?.setSignatureImage('employeeSignature', sharedStampImage);
+```
+
+Attach the ref to the viewer when rendering:
+
+```tsx
+<ContractViewer ref={viewerRef} mode="sign" document={doc} onDocumentChange={onChange} />
+```
+
+When `signatureMode` is set, UI input and external API writes are both constrained:
+- `sign-only`: drawing only
+- `stamp-only`: image upload/injection only
+- `all`: both drawing and image upload/injection
 
 ## Viewer Behavior
 

@@ -61,7 +61,9 @@ const decodeImage = async (bytes: Uint8Array): Promise<RenderedPage> => {
 };
 
 const renderPdfPages = async (pdfData: Uint8Array): Promise<RenderedPage[]> => {
-  const loadingTask = pdfjs.getDocument({ data: pdfData });
+  // pdf.js may transfer the underlying ArrayBuffer to the worker.
+  // Use a fresh copy so the document model keeps an intact buffer for future renders.
+  const loadingTask = pdfjs.getDocument({ data: Uint8Array.from(pdfData) });
   const pdf = await loadingTask.promise;
   const pages: RenderedPage[] = [];
 

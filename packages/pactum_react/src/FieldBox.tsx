@@ -3,13 +3,13 @@ import {
   clearFieldValue,
   getResolvedFieldValue,
   isSignatureValue,
-  isStampValue,
   moveField,
   removeField,
   resizeField,
   setFieldValue,
   type ContractField,
   type ContractFieldValue,
+  type SignatureInputMode,
 } from '@pactum/pactum_core';
 import {
   useCallback,
@@ -21,21 +21,14 @@ import {
   type CSSProperties,
   type RefObject,
 } from 'react';
-import SignatureCanvasImport from 'react-signature-canvas';
 import type { ContractMode } from './ContractMode';
-
-const SignatureCanvas =
-  (
-    SignatureCanvasImport as unknown as {
-      readonly default?: typeof SignatureCanvasImport;
-    }
-  ).default ?? SignatureCanvasImport;
 
 export interface FieldBoxProps {
   readonly field: ContractField;
   readonly document: ContractDocument;
   readonly mode: ContractMode;
   readonly zoom?: number;
+  readonly onSignatureRequest?: (fieldId: string, mode: SignatureInputMode) => void;
   readonly onDocumentChange: (next: ContractDocument) => void;
   readonly pageOverlayRef: RefObject<HTMLDivElement | null>;
 }
@@ -50,21 +43,15 @@ const getSharedBadge = (field: ContractField): string | null => {
 
 const getFieldBackground = (field: ContractField): string => {
   if (field.type === 'checkbox') return 'rgba(16, 185, 129, 0.09)';
-  if (field.type === 'signature' || field.type === 'stamp') return 'rgba(99, 102, 241, 0.09)';
+  if (field.type === 'signature') return 'rgba(99, 102, 241, 0.09)';
   return 'rgba(59, 130, 246, 0.07)';
 };
 
 const isMediaField = (field: ContractField): boolean =>
-  field.type === 'signature' || field.type === 'stamp';
-
-function dataUrlToUint8Array(dataUrl: string): Uint8Array {
-  const [, base64 = ''] = dataUrl.split(',');
-  const binary = atob(base64);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-}
+  field.type === 'signature';
 
 function createMediaUrl(value: ContractFieldValue | undefined): string | null {
-  if (!value || (!isSignatureValue(value) && !isStampValue(value))) {
+  if (!value || !isSignatureValue(value)) {
     return null;
   }
 
@@ -129,11 +116,11 @@ export function FieldBox({
   document,
   mode,
   zoom = 1,
+  onSignatureRequest,
   onDocumentChange,
   pageOverlayRef,
 }: FieldBoxProps): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
-  const signatureRef = useRef<InstanceType<typeof SignatureCanvas> | null>(null);
   const labelId = useId();
 
   const resolved = getResolvedFieldValue(document, field.id);
@@ -177,6 +164,10 @@ export function FieldBox({
     mode !== 'builder' &&
     field.sharedMode !== 'mirror' &&
     !field.readonly;
+  const signatureMode: SignatureInputMode =
+    field.type === 'signature'
+      ? (field.signatureMode ?? 'all')
+      : 'all';
   const canEditMedia = canEditValue && mode === 'sign' && isMediaField(field);
 
   useEffect(() => {
@@ -214,10 +205,10 @@ export function FieldBox({
       return;
     }
 
-    if (!resolvedMediaUrl) {
+    if (field.type === 'signature' && signatureMode === 'stamp-only' && !resolvedMediaUrl) {
       setIsEditingMedia(true);
     }
-  }, [canEditMedia, field, resolvedMediaUrl]);
+  }, [canEditMedia, field, resolvedMediaUrl, signatureMode]);
 
   const trySetValue = useCallback(
     (value: ContractFieldValue) => {
@@ -233,12 +224,11 @@ export function FieldBox({
   const tryClearValue = useCallback(() => {
     try {
       onDocumentChange(clearFieldValue(document, field.id));
-      setIsEditingMedia(isMediaField(field) && mode === 'sign');
-      signatureRef.current?.clear();
+      setIsEditingMedia(false);
     } catch {
       /* mirror or read-only */
     }
-  }, [document, field, mode, onDocumentChange]);
+  }, [document, field, onDocumentChange]);
 
   const onDragPointerDown = (event: React.PointerEvent) => {
     if (mode !== 'builder') return;
@@ -371,22 +361,10 @@ export function FieldBox({
 
     const image = new Uint8Array(await file.arrayBuffer());
     trySetValue({
-      type: 'stamp',
+      type: 'signature',
+      source: 'stamp',
       image,
       ...(file.type ? { mimeType: file.type } : {}),
-    });
-    setIsEditingMedia(false);
-  };
-
-  const onSignatureEnd = () => {
-    const canvas = signatureRef.current;
-    if (!canvas || canvas.isEmpty()) return;
-
-    const image = dataUrlToUint8Array(canvas.toDataURL('image/png'));
-    trySetValue({
-      type: 'signature',
-      image,
-      mimeType: 'image/png',
     });
     setIsEditingMedia(false);
   };
@@ -486,66 +464,11 @@ export function FieldBox({
     );
   }, [canEditValue, field, resolved, scaledTextSize, trySetValue]);
 
-  const signatureEditor =
-    field.type === 'signature' && canEditMedia && isEditingMedia ? (
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          position: 'relative',
-          background: '#fff',
-        }}
-      >
-        <SignatureCanvas
-          ref={signatureRef}
-          clearOnResize={false}
-          canvasProps={{
-            style: {
-              width: '100%',
-              height: '100%',
-              display: 'block',
-            },
-          }}
-          onEnd={onSignatureEnd}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            right: 6,
-            bottom: 6,
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-          }}
-        >
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              signatureRef.current?.clear();
-            }}
-            style={editorButtonStyle()}
-          >
-            Clear Pad
-          </button>
-          {resolvedMediaUrl ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setIsEditingMedia(false);
-              }}
-              style={editorButtonStyle()}
-            >
-              Cancel
-            </button>
-          ) : null}
-        </div>
-      </div>
-    ) : null;
-
   const stampEditor =
-    field.type === 'stamp' && canEditMedia && isEditingMedia ? (
+    field.type === 'signature' &&
+    signatureMode !== 'sign-only' &&
+    canEditMedia &&
+    isEditingMedia ? (
       <label
         style={{
           width: '100%',
@@ -599,14 +522,10 @@ export function FieldBox({
             actions={[
               {
                 key: 'edit',
-                label: field.type === 'signature' ? 'Re-sign' : 'Replace',
+                label: 'Edit',
                 onClick: () => {
-                  if (field.type === 'signature') {
-                    signatureRef.current?.clear();
-                  }
-                  setIsEditingMedia(true);
+                  onSignatureRequest?.(field.id, signatureMode);
                 },
-                tone: 'primary',
               },
               {
                 key: 'remove',
@@ -621,7 +540,7 @@ export function FieldBox({
     ) : null;
 
   const mediaPlaceholder =
-    isMediaField(field) && !mediaPreview && !signatureEditor && !stampEditor ? (
+    isMediaField(field) && !mediaPreview && !stampEditor ? (
       <div
         style={{
           width: '100%',
@@ -640,14 +559,26 @@ export function FieldBox({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              setIsEditingMedia(true);
+              if (signatureMode === 'stamp-only') {
+                setIsEditingMedia(true);
+                return;
+              }
+              onSignatureRequest?.(field.id, signatureMode);
             }}
-            style={editorButtonStyle('primary')}
+            style={editorButtonStyle()}
           >
-            {field.type === 'signature' ? 'Add Signature' : 'Upload Stamp'}
+            {signatureMode === 'stamp-only'
+              ? 'Upload Stamp'
+              : signatureMode === 'sign-only'
+                ? 'Add Signature'
+                : 'Add Signature / Stamp'}
           </button>
         ) : (
-          <span>{field.type === 'signature' ? 'Signature required' : 'Stamp required'}</span>
+          <span>
+            {signatureMode === 'stamp-only'
+              ? 'Stamp required'
+              : 'Signature required'}
+          </span>
         )}
       </div>
     ) : null;
@@ -776,12 +707,11 @@ export function FieldBox({
           transform: isSelected ? 'scale(1.01)' : 'scale(1)',
         }}
       >
-        {signatureEditor}
         {stampEditor}
-        {!signatureEditor && !stampEditor && mediaPreview}
-        {!signatureEditor && !stampEditor && !mediaPreview && mediaPlaceholder}
-        {!signatureEditor && !stampEditor && !mediaPreview && !mediaPlaceholder && input}
-        {!signatureEditor && !stampEditor && !mediaPreview && !mediaPlaceholder && !input ? (
+        {!stampEditor && mediaPreview}
+        {!stampEditor && !mediaPreview && mediaPlaceholder}
+        {!stampEditor && !mediaPreview && !mediaPlaceholder && input}
+        {!stampEditor && !mediaPreview && !mediaPlaceholder && !input ? (
           <span
             style={{
               width: '100%',

@@ -3,6 +3,7 @@ import {
   type ContractDocument,
   type ContractField,
   type ContractFieldType,
+  type SignatureInputMode,
 } from '@pactum/pactum_core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ContractMode } from './ContractMode';
@@ -15,6 +16,7 @@ export interface ContractCanvasPagesProps {
   readonly mode: ContractMode;
   readonly dragCreateType?: ContractFieldType | null;
   readonly onDragCreateComplete?: () => void;
+  readonly onSignatureRequest?: (fieldId: string, mode: SignatureInputMode) => void;
   readonly onDocumentChange: (next: ContractDocument) => void;
   readonly pageWidth?: number;
   readonly zoom?: number;
@@ -26,6 +28,7 @@ export function ContractCanvasPages({
   mode,
   dragCreateType = null,
   onDragCreateComplete,
+  onSignatureRequest,
   onDocumentChange,
   pageWidth = 720,
   zoom = 1,
@@ -46,6 +49,7 @@ export function ContractCanvasPages({
           dragCreateType={dragCreateType}
           zoom={zoom}
           onDocumentChange={onDocumentChange}
+          {...(onSignatureRequest ? { onSignatureRequest } : {})}
           {...(onDragCreateComplete
             ? { onDragCreateComplete }
             : {})}
@@ -62,6 +66,7 @@ function CanvasPageWithFields({
   mode,
   dragCreateType,
   onDragCreateComplete,
+  onSignatureRequest,
   zoom,
   onDocumentChange,
 }: {
@@ -71,6 +76,7 @@ function CanvasPageWithFields({
   readonly mode: ContractMode;
   readonly dragCreateType: ContractFieldType | null;
   readonly onDragCreateComplete?: () => void;
+  readonly onSignatureRequest?: (fieldId: string, mode: SignatureInputMode) => void;
   readonly zoom: number;
   readonly onDocumentChange: (next: ContractDocument) => void;
 }): JSX.Element {
@@ -200,6 +206,7 @@ function CanvasPageWithFields({
             zoom={zoom}
             onDocumentChange={onDocumentChange}
             pageOverlayRef={overlayRef}
+            {...(onSignatureRequest ? { onSignatureRequest } : {})}
           />
         ))}
         {mode === 'builder' && dragCreateType !== null && draftRect ? (

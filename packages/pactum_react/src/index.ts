@@ -10,7 +10,7 @@ export type { ContractMode } from './ContractMode';
 
 export { configurePdfWorker } from './configurePdfWorker';
 
-export type { ContractViewerProps } from './ContractViewer';
+export type { ContractViewerProps, ContractViewerHandle } from './ContractViewer';
 export { ContractViewer } from './ContractViewer';
 
 export type { ContractCanvasPagesProps } from './ContractCanvasPages';

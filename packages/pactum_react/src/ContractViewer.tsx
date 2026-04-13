@@ -1,7 +1,9 @@
-import type { ContractDocument } from '@pactum/pactum_core';
+import type { ContractDocument, ContractFieldType } from '@pactum/pactum_core';
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
   type CSSProperties,
@@ -23,11 +25,16 @@ export interface ContractViewerProps {
   style?: CSSProperties;
 }
 
+export interface ContractViewerHandle {
+  beginDragCreate: (fieldType: ContractFieldType) => void;
+  cancelDragCreate: () => void;
+}
+
 /**
  * Canvas-based contract page viewer with field overlays.
  * The parent owns `ContractDocument` state and passes updates via `onDocumentChange`.
  */
-export function ContractViewer({
+export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerProps>(function ContractViewer({
   mode,
   document,
   onDocumentChange,
@@ -36,10 +43,11 @@ export function ContractViewer({
   pdfWorkerSrc,
   className,
   style,
-}: ContractViewerProps): JSX.Element {
+}: ContractViewerProps, ref): JSX.Element {
   const pageImages =
     'pageImages' in document ? document.pageImages : undefined;
   const [zoom, setZoom] = useState(1);
+  const [dragCreateType, setDragCreateType] = useState<ContractFieldType | null>(null);
   const [pages, setPages] = useState<RenderedPage[]>([]);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -55,6 +63,25 @@ export function ContractViewer({
   useEffect(() => {
     configurePdfWorker(pdfWorkerSrc);
   }, [pdfWorkerSrc]);
+
+  useEffect(() => {
+    if (mode !== 'builder' && dragCreateType !== null) {
+      setDragCreateType(null);
+    }
+  }, [dragCreateType, mode]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      beginDragCreate: (fieldType: ContractFieldType) => {
+        setDragCreateType(fieldType);
+      },
+      cancelDragCreate: () => {
+        setDragCreateType(null);
+      },
+    }),
+    []
+  );
 
   useEffect(() => {
     let alive = true;
@@ -99,6 +126,7 @@ export function ContractViewer({
       const viewport = viewportRef.current;
       if (!viewport) return;
       if (event.button !== 0) return;
+      if (mode === 'builder' && dragCreateType !== null) return;
       const target = event.target as HTMLElement;
       if (target.closest('[data-field-id]')) return;
       const canPan =
@@ -117,7 +145,7 @@ export function ContractViewer({
       setIsPanning(true);
       viewport.setPointerCapture(event.pointerId);
     },
-    []
+    [dragCreateType, mode]
   );
 
   const onViewportPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -236,6 +264,8 @@ export function ContractViewer({
             pages={pages}
             document={document}
             mode={mode}
+            dragCreateType={dragCreateType}
+            onDragCreateComplete={() => setDragCreateType(null)}
             zoom={zoom}
             onDocumentChange={onDocumentChange}
             pageWidth={scaledPageWidth}
@@ -244,7 +274,7 @@ export function ContractViewer({
       </div>
     </div>
   );
-}
+});
 
 function RoundIconButton({
   ariaLabel,

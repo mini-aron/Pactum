@@ -1,6 +1,9 @@
 import type { ContractDocument } from '@pactum/pactum_core';
 import {
+  clearFieldValue,
   getResolvedFieldValue,
+  isSignatureValue,
+  isStampValue,
   moveField,
   removeField,
   resizeField,
@@ -9,16 +12,24 @@ import {
   type ContractFieldValue,
 } from '@pactum/pactum_core';
 import {
-  useEffect,
   useCallback,
-  useMemo,
+  useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type RefObject,
 } from 'react';
-import SignatureCanvas from 'react-signature-canvas';
+import SignatureCanvasImport from 'react-signature-canvas';
 import type { ContractMode } from './ContractMode';
+
+const SignatureCanvas =
+  (
+    SignatureCanvasImport as unknown as {
+      readonly default?: typeof SignatureCanvasImport;
+    }
+  ).default ?? SignatureCanvasImport;
 
 export interface FieldBoxProps {
   readonly field: ContractField;
@@ -26,23 +37,92 @@ export interface FieldBoxProps {
   readonly mode: ContractMode;
   readonly zoom?: number;
   readonly onDocumentChange: (next: ContractDocument) => void;
-  /** Page overlay (normalized coordinates); used to convert drag/resize pixels. */
   readonly pageOverlayRef: RefObject<HTMLDivElement | null>;
 }
 
-const badge = (field: ContractField): string | null => {
+const MIN_SIZE = 0.01;
+const CONTROL_SIZE = 13;
+
+const getSharedBadge = (field: ContractField): string | null => {
   if (!field.sharedKey) return null;
   return field.sharedMode === 'source' ? 'source' : 'mirror';
 };
-
-const MIN_SIZE = 0.01;
-const CONTROL_SIZE = 13;
 
 const getFieldBackground = (field: ContractField): string => {
   if (field.type === 'checkbox') return 'rgba(16, 185, 129, 0.09)';
   if (field.type === 'signature' || field.type === 'stamp') return 'rgba(99, 102, 241, 0.09)';
   return 'rgba(59, 130, 246, 0.07)';
 };
+
+const isMediaField = (field: ContractField): boolean =>
+  field.type === 'signature' || field.type === 'stamp';
+
+function dataUrlToUint8Array(dataUrl: string): Uint8Array {
+  const [, base64 = ''] = dataUrl.split(',');
+  const binary = atob(base64);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function createMediaUrl(value: ContractFieldValue | undefined): string | null {
+  if (!value || (!isSignatureValue(value) && !isStampValue(value))) {
+    return null;
+  }
+
+  const blob = new Blob([Uint8Array.from(value.image)], {
+    type: value.mimeType ?? 'image/png',
+  });
+  return URL.createObjectURL(blob);
+}
+
+function MediaActions({
+  actions,
+}: {
+  readonly actions: ReadonlyArray<{
+    readonly key: string;
+    readonly label: string;
+    readonly onClick: () => void;
+    readonly tone?: 'primary' | 'danger';
+  }>;
+}): JSX.Element {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        right: 6,
+        bottom: 6,
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'flex-end',
+        gap: 6,
+        zIndex: 2,
+      }}
+    >
+      {actions.map((action) => (
+        <button
+          key={action.key}
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            action.onClick();
+          }}
+          style={{
+            border: '1px solid rgba(15, 23, 42, 0.12)',
+            borderRadius: 999,
+            padding: '4px 8px',
+            fontSize: 10,
+            fontWeight: 700,
+            cursor: 'pointer',
+            color: action.tone === 'danger' ? '#991b1b' : '#0f172a',
+            background:
+              action.tone === 'primary' ? 'rgba(255, 255, 255, 0.96)' : 'rgba(255, 255, 255, 0.92)',
+          }}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function FieldBox({
   field,
@@ -53,16 +133,20 @@ export function FieldBox({
   pageOverlayRef,
 }: FieldBoxProps): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
+  const signatureRef = useRef<InstanceType<typeof SignatureCanvas> | null>(null);
   const labelId = useId();
+
   const resolved = getResolvedFieldValue(document, field.id);
   const [isSelected, setIsSelected] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isEditingMedia, setIsEditingMedia] = useState(false);
   const [preview, setPreview] = useState<{
     x: number;
     y: number;
     width: number;
     height: number;
   } | null>(null);
+  const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
 
   const rect = preview ?? {
     x: field.x,
@@ -81,20 +165,59 @@ export function FieldBox({
     'borderRadius' in field && typeof field.borderRadius === 'number'
       ? Math.max(0, Math.min(24, field.borderRadius))
       : 4;
+  const sharedBadge = getSharedBadge(field);
+  const labelText = field.label ?? field.name;
+  const requiredMark = field.required ? ' *' : '';
+  const sharedHoverText =
+    field.sharedKey && sharedBadge
+      ? `[${field.sharedKey}] ${sharedBadge === 'source' ? 'Source' : 'Mirror'}`
+      : null;
+  const canEditValue =
+    mode !== 'readonly' &&
+    mode !== 'builder' &&
+    field.sharedMode !== 'mirror' &&
+    !field.readonly;
+  const canEditMedia = canEditValue && mode === 'sign' && isMediaField(field);
 
   useEffect(() => {
     if (mode !== 'builder' || !isSelected) return;
+
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (rootRef.current?.contains(target)) return;
       setIsSelected(false);
     };
+
     window.addEventListener('pointerdown', onPointerDown, true);
     return () => {
       window.removeEventListener('pointerdown', onPointerDown, true);
     };
   }, [isSelected, mode]);
+
+  useEffect(() => {
+    const mediaUrl = createMediaUrl(resolved);
+    setResolvedMediaUrl(mediaUrl);
+
+    return () => {
+      if (mediaUrl) {
+        URL.revokeObjectURL(mediaUrl);
+      }
+    };
+  }, [resolved]);
+
+  useEffect(() => {
+    if (!isMediaField(field)) return;
+
+    if (!canEditMedia) {
+      setIsEditingMedia(false);
+      return;
+    }
+
+    if (!resolvedMediaUrl) {
+      setIsEditingMedia(true);
+    }
+  }, [canEditMedia, field, resolvedMediaUrl]);
 
   const trySetValue = useCallback(
     (value: ContractFieldValue) => {
@@ -107,65 +230,89 @@ export function FieldBox({
     [document, field.id, onDocumentChange]
   );
 
-  const onDragPointerDown = (e: React.PointerEvent) => {
+  const tryClearValue = useCallback(() => {
+    try {
+      onDocumentChange(clearFieldValue(document, field.id));
+      setIsEditingMedia(isMediaField(field) && mode === 'sign');
+      signatureRef.current?.clear();
+    } catch {
+      /* mirror or read-only */
+    }
+  }, [document, field, mode, onDocumentChange]);
+
+  const onDragPointerDown = (event: React.PointerEvent) => {
     if (mode !== 'builder') return;
-    e.stopPropagation();
-    const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
+
+    event.stopPropagation();
+    const element = event.currentTarget as HTMLElement;
     const overlay = pageOverlayRef.current;
     if (!overlay) return;
-    const r = overlay.getBoundingClientRect();
-    const start = { cx: e.clientX, cy: e.clientY, ox: field.x, oy: field.y };
 
-    const onMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== e.pointerId) return;
-      const dx = (ev.clientX - start.cx) / r.width;
-      const dy = (ev.clientY - start.cy) / r.height;
+    element.setPointerCapture(event.pointerId);
+    const rect = overlay.getBoundingClientRect();
+    const start = { clientX: event.clientX, clientY: event.clientY, originX: field.x, originY: field.y };
+
+    const onMove = (nextEvent: PointerEvent) => {
+      if (nextEvent.pointerId !== event.pointerId) return;
+
+      const dx = (nextEvent.clientX - start.clientX) / rect.width;
+      const dy = (nextEvent.clientY - start.clientY) / rect.height;
       setPreview({
-        x: start.ox + dx,
-        y: start.oy + dy,
+        x: start.originX + dx,
+        y: start.originY + dy,
         width: field.width,
         height: field.height,
       });
     };
-    const onUp = (ev: PointerEvent) => {
-      if (ev.pointerId !== e.pointerId) return;
-      el.releasePointerCapture(ev.pointerId);
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerup', onUp);
-      const dx = (ev.clientX - start.cx) / r.width;
-      const dy = (ev.clientY - start.cy) / r.height;
+
+    const onUp = (nextEvent: PointerEvent) => {
+      if (nextEvent.pointerId !== event.pointerId) return;
+
+      element.releasePointerCapture(nextEvent.pointerId);
+      element.removeEventListener('pointermove', onMove);
+      element.removeEventListener('pointerup', onUp);
+
+      const dx = (nextEvent.clientX - start.clientX) / rect.width;
+      const dy = (nextEvent.clientY - start.clientY) / rect.height;
       setPreview(null);
       onDocumentChange(
-        moveField(document, field.id, { x: start.ox + dx, y: start.oy + dy })
+        moveField(document, field.id, {
+          x: start.originX + dx,
+          y: start.originY + dy,
+        })
       );
     };
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onUp);
+
+    element.addEventListener('pointermove', onMove);
+    element.addEventListener('pointerup', onUp);
   };
 
-  const onResizePointerDown = (e: React.PointerEvent) => {
+  const onResizePointerDown = (event: React.PointerEvent) => {
     if (mode !== 'builder') return;
-    e.stopPropagation();
-    e.preventDefault();
-    const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
+
+    event.stopPropagation();
+    event.preventDefault();
+    const element = event.currentTarget as HTMLElement;
     const overlay = pageOverlayRef.current;
     if (!overlay) return;
-    const r = overlay.getBoundingClientRect();
+
+    element.setPointerCapture(event.pointerId);
+    const rect = overlay.getBoundingClientRect();
     const start = {
-      cx: e.clientX,
-      cy: e.clientY,
-      ow: field.width,
-      oh: field.height,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      originWidth: field.width,
+      originHeight: field.height,
     };
 
-    const onMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== e.pointerId) return;
-      const dw = (ev.clientX - start.cx) / r.width;
-      const dh = (ev.clientY - start.cy) / r.height;
+    const onMove = (nextEvent: PointerEvent) => {
+      if (nextEvent.pointerId !== event.pointerId) return;
+
+      const dw = (nextEvent.clientX - start.clientX) / rect.width;
+      const dh = (nextEvent.clientY - start.clientY) / rect.height;
+
       if (field.type === 'checkbox') {
-        const side = Math.max(MIN_SIZE, start.ow + dw, start.oh + dh);
+        const side = Math.max(MIN_SIZE, start.originWidth + dw, start.originHeight + dh);
         setPreview({
           x: field.x,
           y: field.y,
@@ -174,23 +321,28 @@ export function FieldBox({
         });
         return;
       }
+
       setPreview({
         x: field.x,
         y: field.y,
-        width: Math.max(MIN_SIZE, start.ow + dw),
-        height: Math.max(MIN_SIZE, start.oh + dh),
+        width: Math.max(MIN_SIZE, start.originWidth + dw),
+        height: Math.max(MIN_SIZE, start.originHeight + dh),
       });
     };
-    const onUp = (ev: PointerEvent) => {
-      if (ev.pointerId !== e.pointerId) return;
-      el.releasePointerCapture(ev.pointerId);
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerup', onUp);
-      const dw = (ev.clientX - start.cx) / r.width;
-      const dh = (ev.clientY - start.cy) / r.height;
+
+    const onUp = (nextEvent: PointerEvent) => {
+      if (nextEvent.pointerId !== event.pointerId) return;
+
+      element.releasePointerCapture(nextEvent.pointerId);
+      element.removeEventListener('pointermove', onMove);
+      element.removeEventListener('pointerup', onUp);
+
+      const dw = (nextEvent.clientX - start.clientX) / rect.width;
+      const dh = (nextEvent.clientY - start.clientY) / rect.height;
       setPreview(null);
+
       if (field.type === 'checkbox') {
-        const side = Math.max(MIN_SIZE, start.ow + dw, start.oh + dh);
+        const side = Math.max(MIN_SIZE, start.originWidth + dw, start.originHeight + dh);
         onDocumentChange(
           resizeField(document, field.id, {
             width: side,
@@ -199,25 +351,49 @@ export function FieldBox({
         );
         return;
       }
+
       onDocumentChange(
         resizeField(document, field.id, {
-          width: Math.max(MIN_SIZE, start.ow + dw),
-          height: Math.max(MIN_SIZE, start.oh + dh),
+          width: Math.max(MIN_SIZE, start.originWidth + dw),
+          height: Math.max(MIN_SIZE, start.originHeight + dh),
         })
       );
     };
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onUp);
+
+    element.addEventListener('pointermove', onMove);
+    element.addEventListener('pointerup', onUp);
   };
 
-  const canEditValue =
-    mode !== 'readonly' &&
-    mode !== 'builder' &&
-    field.sharedMode !== 'mirror' &&
-    !field.readonly;
+  const onStampUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const image = new Uint8Array(await file.arrayBuffer());
+    trySetValue({
+      type: 'stamp',
+      image,
+      ...(file.type ? { mimeType: file.type } : {}),
+    });
+    setIsEditingMedia(false);
+  };
+
+  const onSignatureEnd = () => {
+    const canvas = signatureRef.current;
+    if (!canvas || canvas.isEmpty()) return;
+
+    const image = dataUrlToUint8Array(canvas.toDataURL('image/png'));
+    trySetValue({
+      type: 'signature',
+      image,
+      mimeType: 'image/png',
+    });
+    setIsEditingMedia(false);
+  };
 
   const input = useMemo(() => {
-    if (!canEditValue) return null;
+    if (!canEditValue || isMediaField(field)) return null;
+
     if (field.type === 'checkbox') {
       return (
         <button
@@ -238,15 +414,16 @@ export function FieldBox({
             padding: 0,
           }}
         >
-          {resolved === true ? '✓' : ''}
+          {resolved === true ? 'X' : ''}
         </button>
       );
     }
+
     if (field.type === 'textarea') {
       return (
         <textarea
           value={typeof resolved === 'string' ? resolved : ''}
-          onChange={(ev) => trySetValue(ev.target.value)}
+          onChange={(nextEvent) => trySetValue(nextEvent.target.value)}
           placeholder={field.placeholder}
           rows={field.rows ?? 3}
           required={field.required}
@@ -266,6 +443,7 @@ export function FieldBox({
         />
       );
     }
+
     return (
       <input
         type={
@@ -280,15 +458,16 @@ export function FieldBox({
                   : 'text'
         }
         value={
-          typeof resolved === 'string' || typeof resolved === 'number'
-            ? resolved
-            : ''
+          typeof resolved === 'string' || typeof resolved === 'number' ? resolved : ''
         }
-        onChange={(ev) => {
+        onChange={(nextEvent) => {
           if (field.type === 'number') {
-            const n = Number(ev.target.value);
-            trySetValue(Number.isFinite(n) ? n : 0);
-          } else trySetValue(ev.target.value);
+            const value = Number(nextEvent.target.value);
+            trySetValue(Number.isFinite(value) ? value : 0);
+            return;
+          }
+
+          trySetValue(nextEvent.target.value);
         }}
         required={field.required}
         placeholder={field.placeholder}
@@ -307,57 +486,169 @@ export function FieldBox({
     );
   }, [canEditValue, field, resolved, scaledTextSize, trySetValue]);
 
-  const signatureRef = useRef<SignatureCanvas>(null);
-
-  const stampBlock =
-    field.type === 'stamp' && mode === 'sign' && canEditValue ? (
-      <input
-        type="file"
-        accept="image/*"
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          const buf = new Uint8Array(await file.arrayBuffer());
-          trySetValue({
-            type: 'stamp',
-            image: buf,
-            ...(file.type ? { mimeType: file.type } : {}),
-          });
+  const signatureEditor =
+    field.type === 'signature' && canEditMedia && isEditingMedia ? (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+          background: '#fff',
         }}
-        style={{ fontSize: 9, maxWidth: '100%' }}
-      />
-    ) : null;
-
-  const signatureBlock =
-    field.type === 'signature' && mode === 'sign' && canEditValue ? (
-      <div style={{ width: '100%', height: '100%', background: '#fff' }}>
+      >
         <SignatureCanvas
           ref={signatureRef}
+          clearOnResize={false}
           canvasProps={{
-            style: { width: '100%', height: '70%', border: '1px solid #ccc' },
+            style: {
+              width: '100%',
+              height: '100%',
+              display: 'block',
+            },
           }}
-          onEnd={async () => {
-            const canvas = signatureRef.current;
-            if (canvas && !canvas.isEmpty()) {
-              const dataUrl = canvas.toDataURL('image/png');
-              const buf = await fetch(dataUrl).then((r) => r.arrayBuffer());
-              trySetValue({
-                type: 'signature',
-                image: new Uint8Array(buf),
-                mimeType: 'image/png',
-              });
-            }
+          onEnd={onSignatureEnd}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            right: 6,
+            bottom: 6,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+          }}
+        >
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              signatureRef.current?.clear();
+            }}
+            style={editorButtonStyle()}
+          >
+            Clear Pad
+          </button>
+          {resolvedMediaUrl ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsEditingMedia(false);
+              }}
+              style={editorButtonStyle()}
+            >
+              Cancel
+            </button>
+          ) : null}
+        </div>
+      </div>
+    ) : null;
+
+  const stampEditor =
+    field.type === 'stamp' && canEditMedia && isEditingMedia ? (
+      <label
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 12,
+          boxSizing: 'border-box',
+          background: 'rgba(255, 255, 255, 0.92)',
+          border: '1px dashed rgba(59, 130, 246, 0.45)',
+          color: '#0f172a',
+          cursor: 'pointer',
+        }}
+      >
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            void onStampUpload(event);
+          }}
+          style={{ display: 'none' }}
+        />
+        <span style={{ textAlign: 'center', fontSize: scaledTextSize }}>
+          Upload stamp image
+        </span>
+      </label>
+    ) : null;
+
+  const mediaPreview =
+    resolvedMediaUrl ? (
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          background: 'rgba(255, 255, 255, 0.72)',
+        }}
+      >
+        <img
+          src={resolvedMediaUrl}
+          alt={field.name}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            display: 'block',
           }}
         />
-        <button
-          type="button"
-          onClick={() => {
-            signatureRef.current?.clear();
-          }}
-          style={{ fontSize: 9 }}
-        >
-          Clear
-        </button>
+        {canEditMedia ? (
+          <MediaActions
+            actions={[
+              {
+                key: 'edit',
+                label: field.type === 'signature' ? 'Re-sign' : 'Replace',
+                onClick: () => {
+                  if (field.type === 'signature') {
+                    signatureRef.current?.clear();
+                  }
+                  setIsEditingMedia(true);
+                },
+                tone: 'primary',
+              },
+              {
+                key: 'remove',
+                label: 'Remove',
+                onClick: tryClearValue,
+                tone: 'danger',
+              },
+            ]}
+          />
+        ) : null}
+      </div>
+    ) : null;
+
+  const mediaPlaceholder =
+    isMediaField(field) && !mediaPreview && !signatureEditor && !stampEditor ? (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 8,
+          boxSizing: 'border-box',
+          textAlign: 'center',
+          color: '#475569',
+          fontSize: scaledTextSize,
+        }}
+      >
+        {canEditMedia ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsEditingMedia(true);
+            }}
+            style={editorButtonStyle('primary')}
+          >
+            {field.type === 'signature' ? 'Add Signature' : 'Upload Stamp'}
+          </button>
+        ) : (
+          <span>{field.type === 'signature' ? 'Signature required' : 'Stamp required'}</span>
+        )}
       </div>
     ) : null;
 
@@ -365,16 +656,8 @@ export function FieldBox({
     typeof resolved === 'string' || typeof resolved === 'number'
       ? String(resolved)
       : resolved === true
-        ? '✓'
+        ? 'X'
         : '';
-
-  const b = badge(field);
-  const labelText = field.label ?? field.name;
-  const requiredMark = field.required ? ' *' : '';
-  const sharedHoverText =
-    field.sharedKey && b
-      ? `[${field.sharedKey}] ${b === 'source' ? 'Source' : 'Mirror'}`
-      : null;
 
   return (
     <div
@@ -392,9 +675,9 @@ export function FieldBox({
       }}
       onPointerDown={
         mode === 'builder'
-          ? (e) => {
+          ? (event) => {
               setIsSelected(true);
-              onDragPointerDown(e);
+              onDragPointerDown(event);
             }
           : undefined
       }
@@ -417,6 +700,7 @@ export function FieldBox({
       >
         {`${labelText}${requiredMark}`}
       </span>
+
       {sharedHoverText && isHovered ? (
         <span
           style={{
@@ -438,16 +722,17 @@ export function FieldBox({
           {sharedHoverText}
         </span>
       ) : null}
+
       {mode === 'builder' ? (
         <button
           type="button"
           aria-label={`Delete field ${field.name}`}
-          onPointerDown={(e) => {
-            e.stopPropagation();
+          onPointerDown={(event) => {
+            event.stopPropagation();
             setIsSelected(true);
           }}
-          onClick={(e) => {
-            e.stopPropagation();
+          onClick={(event) => {
+            event.stopPropagation();
             onDocumentChange(removeField(document, field.id));
           }}
           style={{
@@ -466,12 +751,12 @@ export function FieldBox({
             cursor: 'pointer',
             zIndex: 4,
             padding: 0,
-            transition: 'transform 120ms ease, background-color 120ms ease',
           }}
         >
-          ×
+          X
         </button>
       ) : null}
+
       <div
         style={{
           width: '100%',
@@ -491,10 +776,12 @@ export function FieldBox({
           transform: isSelected ? 'scale(1.01)' : 'scale(1)',
         }}
       >
-        {stampBlock}
-        {signatureBlock}
-        {!stampBlock && !signatureBlock && input}
-        {!stampBlock && !signatureBlock && !input && (
+        {signatureEditor}
+        {stampEditor}
+        {!signatureEditor && !stampEditor && mediaPreview}
+        {!signatureEditor && !stampEditor && !mediaPreview && mediaPlaceholder}
+        {!signatureEditor && !stampEditor && !mediaPreview && !mediaPlaceholder && input}
+        {!signatureEditor && !stampEditor && !mediaPreview && !mediaPlaceholder && !input ? (
           <span
             style={{
               width: '100%',
@@ -510,13 +797,14 @@ export function FieldBox({
           >
             {displayText}
           </span>
-        )}
+        ) : null}
       </div>
+
       {mode === 'builder' ? (
         <div
-          onPointerDown={(e) => {
+          onPointerDown={(event) => {
             setIsSelected(true);
-            onResizePointerDown(e);
+            onResizePointerDown(event);
           }}
           style={{
             position: 'absolute',
@@ -538,9 +826,22 @@ export function FieldBox({
             zIndex: 3,
           }}
         >
-          ↘
+          +
         </div>
       ) : null}
     </div>
   );
+}
+
+function editorButtonStyle(tone: 'primary' | 'default' = 'default'): CSSProperties {
+  return {
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    borderRadius: 999,
+    padding: '5px 10px',
+    fontSize: 10,
+    fontWeight: 700,
+    cursor: 'pointer',
+    color: tone === 'primary' ? '#fff' : '#0f172a',
+    background: tone === 'primary' ? 'rgba(37, 99, 235, 0.92)' : 'rgba(255, 255, 255, 0.96)',
+  };
 }

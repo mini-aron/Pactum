@@ -30,6 +30,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
+    "prepack": "pnpm build",
+    "prepublishOnly": "pnpm typecheck && pnpm test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist"

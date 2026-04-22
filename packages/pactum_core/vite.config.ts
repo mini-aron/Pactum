@@ -17,7 +17,7 @@ export default defineConfig({
       fileName: (format) => `index.${format === 'es' ? 'js' : 'cjs'}`,
     },
     rollupOptions: {
-      external: [],
+      external: ['pdf-lib'],
     },
     sourcemap: true,
   },

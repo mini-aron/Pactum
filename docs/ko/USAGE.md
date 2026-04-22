@@ -1,18 +1,18 @@
 # Pactum 라이브러리 사용법
 
-이 문서는 `@pactum/pactum_core`와 `@pactum/pactum_react`의 기본 사용법, 주요 반환 형태, 필드 타입, 검증 결과, React viewer 연동 방식을 빠르게 확인하기 위한 한국어 가이드입니다.
+이 문서는 `@pactum-labs/core`와 `@pactum-labs/react`의 기본 사용법, 주요 반환 형태, 필드 타입, 검증 결과, React viewer 연동 방식을 빠르게 확인하기 위한 한국어 가이드입니다.
 
 ## 패키지
 
 | 패키지 | 용도 |
 | --- | --- |
-| `@pactum/pactum_core` | 문서 모델 생성, 필드 추가/수정/삭제, 값 저장, 공유 필드 처리, 검증, PDF export |
-| `@pactum/pactum_react` | React 기반 계약서 뷰어, 필드 오버레이, builder/fill/sign/readonly 모드, 서명/도장 UI |
+| `@pactum-labs/core` | 문서 모델 생성, 필드 추가/수정/삭제, 값 저장, 공유 필드 처리, 검증, PDF export |
+| `@pactum-labs/react` | React 기반 계약서 뷰어, 필드 오버레이, builder/fill/sign/readonly 모드, 서명/도장 UI |
 
 ## 설치
 
 ```bash
-pnpm add @pactum/pactum_core @pactum/pactum_react
+pnpm add @pactum-labs/core @pactum-labs/react
 ```
 
 React 패키지는 `react`와 `react-dom`을 peer dependency로 사용합니다.
@@ -29,7 +29,7 @@ import {
   validateDocument,
   getResolvedValues,
   type ContractDocument,
-} from '@pactum/pactum_core';
+} from '@pactum-labs/core';
 
 let document: ContractDocument = createDocument({
   id: 'contract-001',
@@ -178,7 +178,7 @@ interface PageInfo {
 예를 들어 `x: 0.1`, `width: 0.35`는 페이지 왼쪽 10% 지점에서 시작해 페이지 너비의 35%를 차지한다는 뜻입니다. `createField`, `updateField`, `moveField`, `resizeField`는 좌표를 페이지 범위 안으로 보정합니다.
 
 ```ts
-import { toAbsoluteRect, toNormalizedRect } from '@pactum/pactum_core';
+import { toAbsoluteRect, toNormalizedRect } from '@pactum-labs/core';
 
 const abs = toAbsoluteRect(
   { page: 0, x: 0.1, y: 0.2, width: 0.35, height: 0.05 },
@@ -376,7 +376,7 @@ getResolvedFieldValue(document, 'partyNameMirror');
 ## 검증
 
 ```ts
-import { validateField, validateDocument } from '@pactum/pactum_core';
+import { validateField, validateDocument } from '@pactum-labs/core';
 
 const result = validateDocument(document);
 
@@ -448,7 +448,7 @@ type FieldValidation = {
 날짜 필드는 native date input 값을 사용하므로 저장 값은 `yyyy-mm-dd`입니다. `dateFormat`은 viewer 표시와 PDF export 렌더링에 적용됩니다.
 
 ```ts
-import { formatDateValue, isIsoDateString } from '@pactum/pactum_core';
+import { formatDateValue, isIsoDateString } from '@pactum-labs/core';
 
 formatDateValue('2026-04-22', 'yyyy.mm.dd');
 // '2026.04.22'
@@ -465,7 +465,7 @@ isIsoDateString('2026-04-22');
 ## PDF 내보내기
 
 ```ts
-import { exportToPdf } from '@pactum/pactum_core';
+import { exportToPdf } from '@pactum-labs/core';
 
 const completedPdfBytes = await exportToPdf(document);
 
@@ -478,8 +478,8 @@ PDF export는 `document.pdfData`를 원본 PDF로 읽고, 각 필드의 resolved
 
 ```tsx
 import { useState } from 'react';
-import { ContractViewer } from '@pactum/pactum_react';
-import type { ContractDocument } from '@pactum/pactum_core';
+import { ContractViewer } from '@pactum-labs/react';
+import type { ContractDocument } from '@pactum-labs/core';
 
 function ContractScreen({ initialDocument }: { initialDocument: ContractDocument }) {
   const [document, setDocument] = useState(initialDocument);
@@ -522,7 +522,7 @@ function ContractScreen({ initialDocument }: { initialDocument: ContractDocument
 
 ```tsx
 import { useRef } from 'react';
-import { ContractViewer, type ContractViewerHandle } from '@pactum/pactum_react';
+import { ContractViewer, type ContractViewerHandle } from '@pactum-labs/react';
 
 const viewerRef = useRef<ContractViewerHandle>(null);
 
@@ -594,11 +594,11 @@ import {
   validateDocument,
   exportToPdf,
   type ContractDocument,
-} from '@pactum/pactum_core';
+} from '@pactum-labs/core';
 import {
   ContractViewer,
   type ContractViewerHandle,
-} from '@pactum/pactum_react';
+} from '@pactum-labs/react';
 
 function createInitialDocument(pdfData: Uint8Array): ContractDocument {
   let document = createDocument({

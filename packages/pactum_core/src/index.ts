@@ -1,5 +1,5 @@
 /**
- * @pactum/pactum_core — Framework-agnostic electronic contract document engine.
+ * @pactum-labs/core — Framework-agnostic electronic contract document engine.
  *
  * **Document & fields**
  * - Types: {@link ContractField}, {@link ContractFieldValue}, {@link ContractDocument}

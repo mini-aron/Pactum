@@ -24,7 +24,7 @@ export default defineConfig({
         'react-dom',
         'react/jsx-runtime',
         'react/jsx-dev-runtime',
-        '@pactum/pactum_core',
+        '@pactum-labs/core',
         'react-pdf',
         'react-signature-canvas',
       ],

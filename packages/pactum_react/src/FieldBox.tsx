@@ -1,4 +1,4 @@
-import type { ContractDocument } from '@pactum/pactum_core';
+import type { ContractDocument } from '@pactum-labs/core';
 import {
   clearFieldValue,
   formatDateValue,
@@ -12,7 +12,7 @@ import {
   type ContractField,
   type ContractFieldValue,
   type SignatureInputMode,
-} from '@pactum/pactum_core';
+} from '@pactum-labs/core';
 import {
   useCallback,
   useEffect,

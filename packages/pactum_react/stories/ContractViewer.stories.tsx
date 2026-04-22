@@ -2,7 +2,7 @@ import {
   createDocument,
   createField,
   type ContractDocument,
-} from '@pactum/pactum_core';
+} from '@pactum-labs/core';
 import { PDFDocument } from 'pdf-lib';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useEffect, useState } from 'react';

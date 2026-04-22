@@ -1,4 +1,4 @@
-import type { ContractDocument } from '@pactum/pactum_core';
+import type { ContractDocument } from '@pactum-labs/core';
 import { useEffect, useState } from 'react';
 import type { ContractMode } from './ContractMode';
 import { ContractCanvasPages } from './ContractCanvasPages';

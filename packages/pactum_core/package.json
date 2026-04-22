@@ -1,5 +1,5 @@
 {
-  "name": "@pactum/pactum_core",
+  "name": "@pactum-labs/core",
   "version": "0.0.1",
   "description": "Framework-agnostic electronic contract document engine",
   "license": "MIT",

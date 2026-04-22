@@ -27,9 +27,9 @@ For the full documentation index, see [`docs/README.md`](docs/README.md).
 
 ## Packages
 
-- `@pactum/pactum_core`  
+- `@pactum-labs/core`  
   Contract model, field operations, shared-value rules, validation, and export utilities.
-- `@pactum/pactum_react`  
+- `@pactum-labs/react`  
   Canvas-based contract viewer with interactive overlays, zoom controls, and pan support.
 
 ## Features
@@ -70,7 +70,7 @@ For detailed library usage, return examples, field types, validation output, and
 ### 1) Build a document with core
 
 ```ts
-import { createDocument, createField } from '@pactum/pactum_core';
+import { createDocument, createField } from '@pactum-labs/core';
 
 const document = createDocument({
   id: 'doc-1',
@@ -112,8 +112,8 @@ const withStartDate = createField(next, {
 ### 2) Render in React
 
 ```tsx
-import { ContractViewer } from '@pactum/pactum_react';
-import type { ContractDocument } from '@pactum/pactum_core';
+import { ContractViewer } from '@pactum-labs/react';
+import type { ContractDocument } from '@pactum-labs/core';
 
 function Viewer({
   doc,
@@ -137,11 +137,11 @@ function Viewer({
 ### 3) Signature field mode and external image injection
 
 ```ts
-import { createField } from '@pactum/pactum_core';
+import { createField } from '@pactum-labs/core';
 import type {
   ContractViewerHandle,
   ContractViewerBinaryImageInput,
-} from '@pactum/pactum_react';
+} from '@pactum-labs/react';
 import { useRef } from 'react';
 
 const withSignature = createField(next, {

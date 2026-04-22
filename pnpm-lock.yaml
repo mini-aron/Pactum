@@ -36,7 +36,7 @@ importers:
 
   packages/pactum_react:
     dependencies:
-      '@pactum/pactum_core':
+      '@pactum-labs/core':
         specifier: workspace:*
         version: link:../pactum_core
       react-pdf:

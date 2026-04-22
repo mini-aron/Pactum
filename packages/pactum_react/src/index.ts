@@ -1,6 +1,6 @@
 /**
- * @pactum/pactum_react — React UI for contract page rendering and field overlays.
- * Document rules and value resolution use `@pactum/pactum_core`.
+ * @pactum-labs/react — React UI for contract page rendering and field overlays.
+ * Document rules and value resolution use `@pactum-labs/core`.
  *
  * Canvas pages are the primary render path. PDF input is still supported through
  * internal page conversion.

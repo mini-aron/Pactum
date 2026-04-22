@@ -1,4 +1,4 @@
-import type { ContractDocument } from '@pactum/pactum_core';
+import type { ContractDocument } from '@pactum-labs/core';
 import { pdfjs } from 'react-pdf';
 
 export interface RenderedPage {

@@ -4,7 +4,7 @@ import {
   type ContractField,
   type ContractFieldType,
   type SignatureInputMode,
-} from '@pactum/pactum_core';
+} from '@pactum-labs/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ContractMode } from './ContractMode';
 import { FieldBox } from './FieldBox';

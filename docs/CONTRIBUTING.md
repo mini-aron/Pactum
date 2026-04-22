@@ -20,8 +20,8 @@ pnpm test
 ## Local Workflow
 
 - Use focused scripts while developing:
-  - `pnpm --filter @pactum/pactum_core typecheck`
-  - `pnpm --filter @pactum/pactum_react typecheck`
+  - `pnpm --filter @pactum-labs/core typecheck`
+  - `pnpm --filter @pactum-labs/react typecheck`
 - For UI changes:
   - `cd packages/pactum_react && pnpm storybook`
 

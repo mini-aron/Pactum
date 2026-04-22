@@ -4,8 +4,8 @@ import type {
   ContractFieldValue,
   SignatureField,
   SignatureInputMode,
-} from '@pactum/pactum_core';
-import { setFieldValue } from '@pactum/pactum_core';
+} from '@pactum-labs/core';
+import { setFieldValue } from '@pactum-labs/core';
 import {
   forwardRef,
   useCallback,

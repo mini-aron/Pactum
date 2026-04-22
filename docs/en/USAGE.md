@@ -1,21 +1,21 @@
 # Pactum Library Usage
 
-This guide documents the main APIs in `@pactum/pactum_core` and `@pactum/pactum_react`, including example code, return shapes, field types, validation output, and React viewer integration.
+This guide documents the main APIs in `@pactum-labs/core` and `@pactum-labs/react`, including example code, return shapes, field types, validation output, and React viewer integration.
 
 ## Packages
 
 | Package | Purpose |
 | --- | --- |
-| `@pactum/pactum_core` | Document model, field operations, shared field rules, validation, and PDF export |
-| `@pactum/pactum_react` | React contract viewer, canvas page rendering, field overlays, builder/fill/sign/readonly modes |
+| `@pactum-labs/core` | Document model, field operations, shared field rules, validation, and PDF export |
+| `@pactum-labs/react` | React contract viewer, canvas page rendering, field overlays, builder/fill/sign/readonly modes |
 
 ## Install
 
 ```bash
-pnpm add @pactum/pactum_core @pactum/pactum_react
+pnpm add @pactum-labs/core @pactum-labs/react
 ```
 
-`@pactum/pactum_react` uses `react` and `react-dom` as peer dependencies.
+`@pactum-labs/react` uses `react` and `react-dom` as peer dependencies.
 
 ## Core Quick Start
 
@@ -29,7 +29,7 @@ import {
   validateDocument,
   getResolvedValues,
   type ContractDocument,
-} from '@pactum/pactum_core';
+} from '@pactum-labs/core';
 
 let document: ContractDocument = createDocument({
   id: 'contract-001',
@@ -178,7 +178,7 @@ Field geometry uses normalized coordinates, so the same document model can rende
 For example, `x: 0.1` and `width: 0.35` means the field starts at 10% from the left edge and occupies 35% of the page width. `createField`, `updateField`, `moveField`, and `resizeField` normalize geometry into the page bounds.
 
 ```ts
-import { toAbsoluteRect, toNormalizedRect } from '@pactum/pactum_core';
+import { toAbsoluteRect, toNormalizedRect } from '@pactum-labs/core';
 
 const abs = toAbsoluteRect(
   { page: 0, x: 0.1, y: 0.2, width: 0.35, height: 0.05 },
@@ -376,7 +376,7 @@ getResolvedFieldValue(document, 'partyNameMirror');
 ## Validation
 
 ```ts
-import { validateField, validateDocument } from '@pactum/pactum_core';
+import { validateField, validateDocument } from '@pactum-labs/core';
 
 const result = validateDocument(document);
 
@@ -448,7 +448,7 @@ type FieldValidation = {
 Date fields use the native date input value, so the stored value is `yyyy-mm-dd`. `dateFormat` is applied in the viewer and during PDF export.
 
 ```ts
-import { formatDateValue, isIsoDateString } from '@pactum/pactum_core';
+import { formatDateValue, isIsoDateString } from '@pactum-labs/core';
 
 formatDateValue('2026-04-22', 'yyyy.mm.dd');
 // '2026.04.22'
@@ -465,7 +465,7 @@ Supported tokens are `yyyy`, `yy`, `MM`/`mm`, `M`/`m`, `dd`, and `d`.
 ## PDF Export
 
 ```ts
-import { exportToPdf } from '@pactum/pactum_core';
+import { exportToPdf } from '@pactum-labs/core';
 
 const completedPdfBytes = await exportToPdf(document);
 
@@ -478,8 +478,8 @@ PDF export loads `document.pdfData` as the source PDF and draws each field's res
 
 ```tsx
 import { useState } from 'react';
-import { ContractViewer } from '@pactum/pactum_react';
-import type { ContractDocument } from '@pactum/pactum_core';
+import { ContractViewer } from '@pactum-labs/react';
+import type { ContractDocument } from '@pactum-labs/core';
 
 function ContractScreen({ initialDocument }: { initialDocument: ContractDocument }) {
   const [document, setDocument] = useState(initialDocument);
@@ -522,7 +522,7 @@ function ContractScreen({ initialDocument }: { initialDocument: ContractDocument
 
 ```tsx
 import { useRef } from 'react';
-import { ContractViewer, type ContractViewerHandle } from '@pactum/pactum_react';
+import { ContractViewer, type ContractViewerHandle } from '@pactum-labs/react';
 
 const viewerRef = useRef<ContractViewerHandle>(null);
 
@@ -594,11 +594,11 @@ import {
   validateDocument,
   exportToPdf,
   type ContractDocument,
-} from '@pactum/pactum_core';
+} from '@pactum-labs/core';
 import {
   ContractViewer,
   type ContractViewerHandle,
-} from '@pactum/pactum_react';
+} from '@pactum-labs/react';
 
 function createInitialDocument(pdfData: Uint8Array): ContractDocument {
   let document = createDocument({

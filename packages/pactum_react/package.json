@@ -1,5 +1,5 @@
 {
-  "name": "@pactum/pactum_react",
+  "name": "@pactum-labs/react",
   "version": "0.0.1",
   "description": "React UI for Pactum electronic contract documents",
   "license": "MIT",
@@ -48,7 +48,7 @@
     "react-dom": "^18.2.0 || ^19.0.0"
   },
   "dependencies": {
-    "@pactum/pactum_core": "workspace:*",
+    "@pactum-labs/core": "workspace:*",
     "react-pdf": "^9.2.1",
     "react-signature-canvas": "^1.0.6"
   },

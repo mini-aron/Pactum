@@ -4,8 +4,8 @@
 
 Security fixes are provided for the latest published versions of:
 
-- `@pactum/pactum_core`
-- `@pactum/pactum_react`
+- `@pactum-labs/core`
+- `@pactum-labs/react`
 
 ## Reporting a Vulnerability
 

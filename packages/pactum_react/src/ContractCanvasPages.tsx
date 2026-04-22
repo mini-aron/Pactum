@@ -15,6 +15,7 @@ export interface ContractCanvasPagesProps {
   readonly document: ContractDocument;
   readonly mode: ContractMode;
   readonly dragCreateType?: ContractFieldType | null;
+  readonly dragCreatePlaceholder?: string;
   readonly onDragCreateComplete?: () => void;
   readonly onSignatureRequest?: (fieldId: string, mode: SignatureInputMode) => void;
   readonly onDocumentChange: (next: ContractDocument) => void;
@@ -27,6 +28,7 @@ export function ContractCanvasPages({
   document,
   mode,
   dragCreateType = null,
+  dragCreatePlaceholder,
   onDragCreateComplete,
   onSignatureRequest,
   onDocumentChange,
@@ -36,6 +38,8 @@ export function ContractCanvasPages({
   if (pages.length === 0) {
     return <span style={{ padding: 8 }}>Loading pages…</span>;
   }
+
+  const normalizedDragCreatePlaceholder = dragCreatePlaceholder?.trim();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
@@ -49,6 +53,9 @@ export function ContractCanvasPages({
           dragCreateType={dragCreateType}
           zoom={zoom}
           onDocumentChange={onDocumentChange}
+          {...(normalizedDragCreatePlaceholder
+            ? { dragCreatePlaceholder: normalizedDragCreatePlaceholder }
+            : {})}
           {...(onSignatureRequest ? { onSignatureRequest } : {})}
           {...(onDragCreateComplete
             ? { onDragCreateComplete }
@@ -65,6 +72,7 @@ function CanvasPageWithFields({
   document,
   mode,
   dragCreateType,
+  dragCreatePlaceholder,
   onDragCreateComplete,
   onSignatureRequest,
   zoom,
@@ -75,6 +83,7 @@ function CanvasPageWithFields({
   readonly document: ContractDocument;
   readonly mode: ContractMode;
   readonly dragCreateType: ContractFieldType | null;
+  readonly dragCreatePlaceholder?: string;
   readonly onDragCreateComplete?: () => void;
   readonly onSignatureRequest?: (fieldId: string, mode: SignatureInputMode) => void;
   readonly zoom: number;
@@ -162,6 +171,7 @@ function CanvasPageWithFields({
           y,
           width,
           height,
+          ...(dragCreatePlaceholder ? { placeholder: dragCreatePlaceholder } : {}),
         })
       );
       onDragCreateComplete?.();

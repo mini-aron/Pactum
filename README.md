@@ -66,6 +66,7 @@ const next = createField(document, {
   y: 0.2,
   width: 0.35,
   height: 0.05,
+  placeholder: 'Enter employee name',
   required: true,
   textSize: 12,
   borderRadius: 4,
@@ -135,6 +136,14 @@ Attach the ref to the viewer when rendering:
 
 ```tsx
 <ContractViewer ref={viewerRef} mode="sign" document={doc} onDocumentChange={onChange} />
+```
+
+For builder drag-create flows, pass an optional placeholder when starting field creation. Omit it or pass an empty value to create the field without a placeholder:
+
+```ts
+viewerRef.current?.beginDragCreate('text', {
+  placeholder: 'Enter employee name',
+});
 ```
 
 When `signatureMode` is set, UI input and external API writes are both constrained:

@@ -13,6 +13,7 @@ export { configurePdfWorker } from './configurePdfWorker';
 export type {
   ContractViewerProps,
   ContractViewerHandle,
+  ContractViewerDragCreateOptions,
   ContractViewerImageInput,
   ContractViewerBinaryImageInput,
 } from './ContractViewer';

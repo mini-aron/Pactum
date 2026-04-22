@@ -34,11 +34,18 @@ export interface ContractViewerProps {
 }
 
 export interface ContractViewerHandle {
-  beginDragCreate: (fieldType: ContractFieldType) => void;
+  beginDragCreate: (
+    fieldType: ContractFieldType,
+    options?: ContractViewerDragCreateOptions
+  ) => void;
   cancelDragCreate: () => void;
   setFieldImage: (fieldId: string, image: ContractViewerImageInput) => void;
   setSignatureImage: (fieldId: string, image: ContractViewerBinaryImageInput) => void;
   setStampImage: (fieldId: string, image: ContractViewerBinaryImageInput) => void;
+}
+
+export interface ContractViewerDragCreateOptions {
+  readonly placeholder?: string;
 }
 
 export interface ContractViewerBinaryImageInput {
@@ -76,6 +83,11 @@ function toUint8Array(image: Uint8Array | ArrayBuffer): Uint8Array {
   return new Uint8Array(image.slice(0));
 }
 
+function normalizeOptionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 /**
  * Canvas-based contract page viewer with field overlays.
  * The parent owns `ContractDocument` state and passes updates via `onDocumentChange`.
@@ -93,7 +105,10 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
   const pageImages =
     'pageImages' in document ? document.pageImages : undefined;
   const [zoom, setZoom] = useState(1);
-  const [dragCreateType, setDragCreateType] = useState<ContractFieldType | null>(null);
+  const [dragCreate, setDragCreate] = useState<{
+    type: ContractFieldType;
+    placeholder?: string;
+  } | null>(null);
   const [activeSignatureRequest, setActiveSignatureRequest] = useState<{
     fieldId: string;
     mode: SignatureInputMode;
@@ -150,19 +165,26 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
   }, [pdfWorkerSrc]);
 
   useEffect(() => {
-    if (mode !== 'builder' && dragCreateType !== null) {
-      setDragCreateType(null);
+    if (mode !== 'builder' && dragCreate !== null) {
+      setDragCreate(null);
     }
-  }, [dragCreateType, mode]);
+  }, [dragCreate, mode]);
 
   useImperativeHandle(
     ref,
     () => ({
-      beginDragCreate: (fieldType: ContractFieldType) => {
-        setDragCreateType(fieldType);
+      beginDragCreate: (
+        fieldType: ContractFieldType,
+        options?: ContractViewerDragCreateOptions
+      ) => {
+        const placeholder = normalizeOptionalText(options?.placeholder);
+        setDragCreate({
+          type: fieldType,
+          ...(placeholder ? { placeholder } : {}),
+        });
       },
       cancelDragCreate: () => {
-        setDragCreateType(null);
+        setDragCreate(null);
       },
       setFieldImage: (fieldId: string, image: ContractViewerImageInput) => {
         applyFieldImage(fieldId, image);
@@ -220,7 +242,7 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
       const viewport = viewportRef.current;
       if (!viewport) return;
       if (event.button !== 0) return;
-      if (mode === 'builder' && dragCreateType !== null) return;
+      if (mode === 'builder' && dragCreate !== null) return;
       const target = event.target as HTMLElement;
       if (target.closest('[data-field-id]')) return;
       const canPan =
@@ -239,7 +261,7 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
       setIsPanning(true);
       viewport.setPointerCapture(event.pointerId);
     },
-    [dragCreateType, mode]
+    [dragCreate, mode]
   );
 
   const onViewportPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -372,7 +394,7 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
           minHeight: 0,
           overflow: 'auto',
           cursor:
-            mode === 'builder' && dragCreateType !== null
+            mode === 'builder' && dragCreate !== null
               ? 'crosshair'
               : isPanning
                 ? 'grabbing'
@@ -390,8 +412,8 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
             pages={pages}
             document={document}
             mode={mode}
-            dragCreateType={dragCreateType}
-            onDragCreateComplete={() => setDragCreateType(null)}
+            dragCreateType={dragCreate?.type ?? null}
+            onDragCreateComplete={() => setDragCreate(null)}
             onSignatureRequest={(fieldId, signatureMode) => {
               if (mode !== 'sign') return;
               setActiveSignatureRequest({ fieldId, mode: signatureMode });
@@ -399,6 +421,9 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
             zoom={zoom}
             onDocumentChange={onDocumentChange}
             pageWidth={scaledPageWidth}
+            {...(dragCreate?.placeholder
+              ? { dragCreatePlaceholder: dragCreate.placeholder }
+              : {})}
           />
         )}
       </div>

@@ -561,11 +561,16 @@ export function FieldBox({
         <img
           src={resolvedMediaUrl}
           alt={field.name}
+          draggable={false}
+          onDragStart={(event) => {
+            event.preventDefault();
+          }}
           style={{
             width: '100%',
             height: '100%',
             objectFit: 'contain',
             display: 'block',
+            userSelect: 'none',
           }}
         />
         {canEditMedia ? (

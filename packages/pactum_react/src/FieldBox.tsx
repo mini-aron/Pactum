@@ -642,6 +642,16 @@ export function FieldBox({
       : resolved === true
         ? 'X'
         : '';
+  const builderPlaceholderText =
+    mode === 'builder' &&
+    displayText === '' &&
+    !isMediaField(field) &&
+    field.type !== 'checkbox'
+      ? (field.type === 'date'
+          ? (field.placeholder?.trim() || field.dateFormat?.trim())
+          : field.placeholder?.trim())
+      : undefined;
+  const visibleDisplayText = builderPlaceholderText ?? displayText;
 
   return (
     <div
@@ -774,11 +784,17 @@ export function FieldBox({
               justifyContent: 'center',
               fontSize:
                 field.type === 'checkbox' ? scaledTextSize + 6 : scaledTextSize,
-              color: '#0f172a',
+              color: builderPlaceholderText ? '#64748b' : '#0f172a',
               pointerEvents: 'none',
+              padding: '0 4px',
+              boxSizing: 'border-box',
+              textAlign: 'center',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
-            {displayText}
+            {visibleDisplayText}
           </span>
         ) : null}
       </div>

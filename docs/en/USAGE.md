@@ -1,13 +1,13 @@
-# Pactum library usage
+# Pactum Library Usage
 
-이 문서는 `@pactum/pactum_core`와 `@pactum/pactum_react`의 기본 사용법, 주요 반환 형태, 필드 타입을 빠르게 확인하기 위한 가이드입니다.
+This guide documents the main APIs in `@pactum/pactum_core` and `@pactum/pactum_react`, including example code, return shapes, field types, validation output, and React viewer integration.
 
 ## Packages
 
 | Package | Purpose |
 | --- | --- |
-| `@pactum/pactum_core` | 문서 모델 생성, 필드 추가/수정/삭제, 값 저장, 공유 필드 처리, 검증, PDF export |
-| `@pactum/pactum_react` | React 기반 계약서 뷰어, 필드 오버레이, builder/fill/sign/readonly 모드, 서명/도장 UI |
+| `@pactum/pactum_core` | Document model, field operations, shared field rules, validation, and PDF export |
+| `@pactum/pactum_react` | React contract viewer, canvas page rendering, field overlays, builder/fill/sign/readonly modes |
 
 ## Install
 
@@ -15,11 +15,11 @@
 pnpm add @pactum/pactum_core @pactum/pactum_react
 ```
 
-React 패키지는 `react`와 `react-dom`을 peer dependency로 사용합니다.
+`@pactum/pactum_react` uses `react` and `react-dom` as peer dependencies.
 
-## Core quick start
+## Core Quick Start
 
-`createDocument`는 빈 계약 문서 모델을 만들고, 이후 모든 operation은 기존 객체를 직접 변경하지 않고 새 `ContractDocument`를 반환합니다.
+`createDocument` creates an empty contract document model. Core operations do not mutate the original object. They return the next `ContractDocument`.
 
 ```ts
 import {
@@ -77,7 +77,7 @@ const validation = validateDocument(document);
 const values = getResolvedValues(document);
 ```
 
-### Return example
+### Return Example
 
 ```ts
 validation;
@@ -137,7 +137,7 @@ document;
 // }
 ```
 
-## Document shape
+## Document Shape
 
 ```ts
 interface ContractDocument {
@@ -161,21 +161,21 @@ interface PageInfo {
 }
 ```
 
-`pageImages`가 있으면 React viewer는 이미지 페이지를 우선 렌더링합니다. `pdfData`는 PDF export와 PDF 렌더링 경로에서 사용되므로 문서 생성 시 항상 전달해야 합니다.
+When `pageImages` is present, the React viewer renders image-backed pages first. `pdfData` is still required because it is used by PDF export and by the PDF rendering fallback.
 
 ## Coordinates
 
-필드 위치는 페이지 크기와 무관한 normalized coordinate입니다.
+Field geometry uses normalized coordinates, so the same document model can render against different page display sizes.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `page` | `number` | 0부터 시작하는 페이지 인덱스 |
-| `x` | `number` | 페이지 왼쪽 기준 위치, `0`에서 `1` 사이 |
-| `y` | `number` | 페이지 위쪽 기준 위치, `0`에서 `1` 사이 |
-| `width` | `number` | 페이지 너비 대비 비율 |
-| `height` | `number` | 페이지 높이 대비 비율 |
+| `page` | `number` | Zero-based page index |
+| `x` | `number` | Horizontal position from the left edge, from `0` to `1` |
+| `y` | `number` | Vertical position from the top edge, from `0` to `1` |
+| `width` | `number` | Width as a ratio of page width |
+| `height` | `number` | Height as a ratio of page height |
 
-예를 들어 `x: 0.1`, `width: 0.35`는 페이지 왼쪽 10% 지점에서 시작해 페이지 너비의 35%를 차지한다는 뜻입니다. `createField`, `updateField`, `moveField`, `resizeField`는 좌표를 페이지 범위 안으로 보정합니다.
+For example, `x: 0.1` and `width: 0.35` means the field starts at 10% from the left edge and occupies 35% of the page width. `createField`, `updateField`, `moveField`, and `resizeField` normalize geometry into the page bounds.
 
 ```ts
 import { toAbsoluteRect, toNormalizedRect } from '@pactum/pactum_core';
@@ -197,46 +197,46 @@ const normalized = toNormalizedRect(
 // { page: 0, x: 0.1, y: 0.2, width: 0.35, height: 0.05 }
 ```
 
-## Field types
+## Field Types
 
-공통 필드는 모든 `ContractField`가 갖는 기본 속성입니다.
+Common fields are shared by every `ContractField`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `id` | `string` | Yes | 필드 고유 ID |
-| `name` | `string` | Yes | 내부/접근성 이름 |
-| `type` | `ContractFieldType` | Yes | 필드 타입 |
-| `page` | `number` | Yes | 0-based 페이지 번호 |
-| `x` | `number` | Yes | normalized x |
-| `y` | `number` | Yes | normalized y |
-| `width` | `number` | Yes | normalized width |
-| `height` | `number` | Yes | normalized height |
-| `label` | `string` | No | viewer에서 표시할 라벨. 없으면 `name` 사용 |
-| `textSize` | `number` | No | 표시/입력 텍스트 크기 |
-| `borderRadius` | `number` | No | viewer field box radius |
-| `required` | `boolean` | No | 필수 입력 여부 |
-| `placeholder` | `string` | No | 입력 placeholder |
-| `readonly` | `boolean` | No | 값 변경 금지 |
-| `hidden` | `boolean` | No | PDF export 시 렌더링 제외 |
-| `defaultValue` | `unknown` | No | 직접 값이 없을 때 사용할 기본값 |
-| `validation` | `FieldValidation` | No | 검증 규칙 |
-| `sharedKey` | `string` | No | 공유 필드 그룹 키 |
-| `sharedMode` | `'source' \| 'mirror'` | No | 공유 필드 원본/미러 구분 |
+| `id` | `string` | Yes | Unique field ID |
+| `name` | `string` | Yes | Internal and accessible field name |
+| `type` | `ContractFieldType` | Yes | Field type |
+| `page` | `number` | Yes | Zero-based page index |
+| `x` | `number` | Yes | Normalized x coordinate |
+| `y` | `number` | Yes | Normalized y coordinate |
+| `width` | `number` | Yes | Normalized width |
+| `height` | `number` | Yes | Normalized height |
+| `label` | `string` | No | Viewer label. Falls back to `name` |
+| `textSize` | `number` | No | Text size for display and input |
+| `borderRadius` | `number` | No | Viewer field box radius |
+| `required` | `boolean` | No | Whether the field must be filled |
+| `placeholder` | `string` | No | Input placeholder |
+| `readonly` | `boolean` | No | Prevents value changes |
+| `hidden` | `boolean` | No | Excludes the field from PDF export rendering |
+| `defaultValue` | `unknown` | No | Fallback value when no direct value exists |
+| `validation` | `FieldValidation` | No | Validation rules |
+| `sharedKey` | `string` | No | Shared field group key |
+| `sharedMode` | `'source' \| 'mirror'` | No | Shared field source/mirror mode |
 
-타입별 추가 필드는 다음과 같습니다.
+Type-specific fields:
 
-| Type | Value type | Extra fields | Notes |
+| Type | Value Type | Extra Fields | Notes |
 | --- | --- | --- | --- |
-| `text` | `string` | `maxLength?: number` | 단일 행 텍스트 |
-| `textarea` | `string` | `maxLength?: number`, `rows?: number` | 여러 행 텍스트 |
-| `date` | `string` | `dateFormat?: string` | 값은 `yyyy-mm-dd`로 저장, 렌더링/export 시 포맷 적용 |
-| `checkbox` | `boolean` | 없음 | `true`일 때 체크 표시 |
-| `signature` | `SignatureValue` | `signatureMode?: 'all' \| 'sign-only' \| 'stamp-only'` | 직접 서명 또는 도장 이미지 |
-| `email` | `string` | 없음 | viewer input type은 `email` |
-| `phone` | `string` | 없음 | viewer input type은 `tel` |
-| `number` | `number` | `min?: number`, `max?: number`, `step?: number` | 숫자 입력 및 범위 검증 |
+| `text` | `string` | `maxLength?: number` | Single-line text |
+| `textarea` | `string` | `maxLength?: number`, `rows?: number` | Multi-line text |
+| `date` | `string` | `dateFormat?: string` | Stored as `yyyy-mm-dd`; formatted when rendered/exported |
+| `checkbox` | `boolean` | None | Draws a check mark when `true` |
+| `signature` | `SignatureValue` | `signatureMode?: 'all' \| 'sign-only' \| 'stamp-only'` | Drawn signature or stamp image |
+| `email` | `string` | None | Viewer input type is `email` |
+| `phone` | `string` | None | Viewer input type is `tel` |
+| `number` | `number` | `min?: number`, `max?: number`, `step?: number` | Numeric input and numeric validation |
 
-### Field examples
+### Field Examples
 
 ```ts
 const textField = {
@@ -279,7 +279,7 @@ const signatureField = {
 } as const;
 ```
 
-## Value types
+## Value Types
 
 ```ts
 interface SignatureValue {
@@ -301,7 +301,7 @@ type FieldValueMap = Record<string, ContractFieldValue>;
 type SharedValueMap = Record<string, ContractFieldValue>;
 ```
 
-서명/도장 값 예시는 다음과 같습니다.
+Signature or stamp value example:
 
 ```ts
 document = setFieldValue(document, 'employeeSignature', {
@@ -324,18 +324,18 @@ document = setFieldValue(document, 'employeeSignature', {
 
 | Function | Return | Description |
 | --- | --- | --- |
-| `createDocument(input)` | `ContractDocument` | 빈 문서 생성 |
-| `createField(document, field)` | `ContractDocument` | 필드 추가 |
-| `updateField(document, fieldId, patch)` | `ContractDocument` | 필드 속성 수정. `id`, `type`은 변경 불가 |
-| `removeField(document, fieldId)` | `ContractDocument` | 필드와 직접 값을 삭제 |
-| `moveField(document, fieldId, position)` | `ContractDocument` | 필드 위치 변경 |
-| `resizeField(document, fieldId, size)` | `ContractDocument` | 필드 크기 변경 |
-| `setFieldValue(document, fieldId, value)` | `ContractDocument` | 필드 값 저장 |
-| `clearFieldValue(document, fieldId)` | `ContractDocument` | 필드 값 삭제 |
-| `getResolvedFieldValue(document, fieldId)` | `ContractFieldValue \| undefined` | 공유 값과 default value를 포함한 단일 필드 값 조회 |
-| `getResolvedValues(document)` | `FieldValueMap` | 모든 필드의 resolved value map 조회 |
+| `createDocument(input)` | `ContractDocument` | Creates an empty document |
+| `createField(document, field)` | `ContractDocument` | Adds a field |
+| `updateField(document, fieldId, patch)` | `ContractDocument` | Updates field properties. `id` and `type` cannot be patched |
+| `removeField(document, fieldId)` | `ContractDocument` | Removes a field and its direct value |
+| `moveField(document, fieldId, position)` | `ContractDocument` | Moves a field |
+| `resizeField(document, fieldId, size)` | `ContractDocument` | Resizes a field |
+| `setFieldValue(document, fieldId, value)` | `ContractDocument` | Sets a field value |
+| `clearFieldValue(document, fieldId)` | `ContractDocument` | Clears a field value |
+| `getResolvedFieldValue(document, fieldId)` | `ContractFieldValue \| undefined` | Reads one field value, including shared values and defaults |
+| `getResolvedValues(document)` | `FieldValueMap` | Reads all resolved field values |
 
-`setFieldValue`와 `clearFieldValue`는 mirror 필드와 readonly 필드에 대해 에러를 던집니다. 공유 source 필드에 값을 저장하면 `fieldValues`가 아니라 `sharedValues`가 갱신됩니다.
+`setFieldValue` and `clearFieldValue` throw for mirror fields and readonly fields. When a shared source field is set, `sharedValues` is updated instead of `fieldValues`.
 
 ```ts
 document = createField(document, {
@@ -385,7 +385,7 @@ if (!result.valid) {
 }
 ```
 
-반환 타입은 다음과 같습니다.
+Return type:
 
 ```ts
 interface ValidationResult {
@@ -412,7 +412,7 @@ type ValidationErrorCode =
   | 'SHARED_SOURCE_NOT_FOUND';
 ```
 
-실패 예시는 다음과 같습니다.
+Failure example:
 
 ```ts
 const result = validateDocument(document);
@@ -430,7 +430,7 @@ const result = validateDocument(document);
 // }
 ```
 
-`FieldValidation`은 문자열과 숫자 검증을 지원합니다.
+`FieldValidation` supports string and number rules.
 
 ```ts
 type FieldValidation = {
@@ -443,9 +443,9 @@ type FieldValidation = {
 };
 ```
 
-## Date formatting
+## Date Formatting
 
-날짜 필드는 native date input 값을 사용하므로 저장 값은 `yyyy-mm-dd`입니다. `dateFormat`은 viewer 표시와 PDF export 렌더링에 적용됩니다.
+Date fields use the native date input value, so the stored value is `yyyy-mm-dd`. `dateFormat` is applied in the viewer and during PDF export.
 
 ```ts
 import { formatDateValue, isIsoDateString } from '@pactum/pactum_core';
@@ -460,9 +460,9 @@ isIsoDateString('2026-04-22');
 // true
 ```
 
-지원 토큰은 `yyyy`, `yy`, `MM`/`mm`, `M`/`m`, `dd`, `d`입니다.
+Supported tokens are `yyyy`, `yy`, `MM`/`mm`, `M`/`m`, `dd`, and `d`.
 
-## PDF export
+## PDF Export
 
 ```ts
 import { exportToPdf } from '@pactum/pactum_core';
@@ -472,9 +472,9 @@ const completedPdfBytes = await exportToPdf(document);
 // completedPdfBytes: Uint8Array
 ```
 
-PDF export는 `document.pdfData`를 원본 PDF로 읽고, 각 필드의 resolved value를 페이지 위에 그립니다. `hidden: true`인 필드는 export에서 제외됩니다.
+PDF export loads `document.pdfData` as the source PDF and draws each field's resolved value on the matching page. Fields with `hidden: true` are not rendered into the exported PDF.
 
-## React viewer
+## React Viewer
 
 ```tsx
 import { useState } from 'react';
@@ -496,29 +496,29 @@ function ContractScreen({ initialDocument }: { initialDocument: ContractDocument
 }
 ```
 
-### Viewer props
+### Viewer Props
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
-| `mode` | `'builder' \| 'fill' \| 'sign' \| 'readonly'` | Yes | viewer 동작 모드 |
-| `document` | `ContractDocument` | Yes | 렌더링할 문서 모델 |
-| `onDocumentChange` | `(next: ContractDocument) => void` | Yes | 값/필드 변경 시 호출 |
-| `pageWidth` | `number` | No | 기본 페이지 표시 너비. 기본값 `720` |
-| `viewportHeight` | `number \| string` | No | viewer 높이. 기본값 `'80vh'` |
-| `pdfWorkerSrc` | `string` | No | pdf.js worker 경로 |
-| `className` | `string` | No | root class name |
-| `style` | `CSSProperties` | No | root inline style |
+| `mode` | `'builder' \| 'fill' \| 'sign' \| 'readonly'` | Yes | Viewer interaction mode |
+| `document` | `ContractDocument` | Yes | Document model to render |
+| `onDocumentChange` | `(next: ContractDocument) => void` | Yes | Called when fields or values change |
+| `pageWidth` | `number` | No | Base displayed page width. Default is `720` |
+| `viewportHeight` | `number \| string` | No | Viewer height. Default is `'80vh'` |
+| `pdfWorkerSrc` | `string` | No | pdf.js worker URL |
+| `className` | `string` | No | Root class name |
+| `style` | `CSSProperties` | No | Root inline style |
 
 ### Modes
 
 | Mode | Behavior |
 | --- | --- |
-| `builder` | 필드 드래그 생성, 이동, 크기 변경, 삭제 |
-| `fill` | 텍스트/날짜/체크박스/숫자 등 일반 입력 |
-| `sign` | 일반 입력과 서명/도장 입력 |
-| `readonly` | 입력과 필드 조작 비활성화 |
+| `builder` | Drag-create, move, resize, and delete fields |
+| `fill` | Fill normal fields such as text, date, checkbox, and number |
+| `sign` | Fill normal fields and add signatures or stamps |
+| `readonly` | Disable value input and field editing |
 
-### Viewer ref API
+### Viewer Ref API
 
 ```tsx
 import { useRef } from 'react';
@@ -546,7 +546,7 @@ viewerRef.current?.cancelDragCreate();
 />
 ```
 
-서명/도장 이미지를 외부에서 주입할 수도 있습니다.
+External code can inject signature and stamp images.
 
 ```ts
 viewerRef.current?.setSignatureImage('employeeSignature', {
@@ -566,7 +566,7 @@ viewerRef.current?.setFieldImage('employeeSignature', {
 });
 ```
 
-이미지 입력 타입은 다음과 같습니다.
+Image input types:
 
 ```ts
 interface ContractViewerBinaryImageInput {
@@ -581,9 +581,9 @@ interface ContractViewerImageInput extends ContractViewerBinaryImageInput {
 }
 ```
 
-`signatureMode`가 `sign-only`이면 stamp 주입이 거부되고, `stamp-only`이면 draw 주입이 거부됩니다.
+When `signatureMode` is `sign-only`, stamp injection is rejected. When it is `stamp-only`, draw injection is rejected.
 
-## Complete example
+## Complete Example
 
 ```tsx
 import { useRef, useState } from 'react';

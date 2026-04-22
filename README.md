@@ -3,6 +3,28 @@
 Pactum is an open-source contract toolkit for building document workflows.
 It ships as a monorepo with a framework-agnostic core and a React viewer.
 
+## Table of Contents
+
+- [Documentation](#documentation)
+- [Packages](#packages)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Workspace Commands](#workspace-commands)
+- [Quick Start](#quick-start)
+- [Viewer Behavior](#viewer-behavior)
+- [Development](#development)
+- [Open Source Policy](#open-source-policy)
+
+## Documentation
+
+| Language | Usage guide |
+| --- | --- |
+| English | [`docs/en/USAGE.md`](docs/en/USAGE.md) |
+| Korean | [`docs/ko/USAGE.md`](docs/ko/USAGE.md) |
+
+For the full documentation index, see [`docs/README.md`](docs/README.md).
+
 ## Packages
 
 - `@pactum/pactum_core`  
@@ -43,7 +65,7 @@ pnpm clean
 
 ## Quick Start
 
-For detailed library usage, return examples, field types, validation output, and React viewer APIs, see [`docs/USAGE.md`](docs/USAGE.md).
+For detailed library usage, return examples, field types, validation output, and React viewer APIs, see the English guide at [`docs/en/USAGE.md`](docs/en/USAGE.md) or the Korean guide at [`docs/ko/USAGE.md`](docs/ko/USAGE.md).
 
 ### 1) Build a document with core
 

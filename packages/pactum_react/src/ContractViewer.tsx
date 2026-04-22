@@ -46,6 +46,7 @@ export interface ContractViewerHandle {
 
 export interface ContractViewerDragCreateOptions {
   readonly placeholder?: string;
+  readonly dateFormat?: string;
 }
 
 export interface ContractViewerBinaryImageInput {
@@ -108,6 +109,7 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
   const [dragCreate, setDragCreate] = useState<{
     type: ContractFieldType;
     placeholder?: string;
+    dateFormat?: string;
   } | null>(null);
   const [activeSignatureRequest, setActiveSignatureRequest] = useState<{
     fieldId: string;
@@ -178,9 +180,11 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
         options?: ContractViewerDragCreateOptions
       ) => {
         const placeholder = normalizeOptionalText(options?.placeholder);
+        const dateFormat = normalizeOptionalText(options?.dateFormat);
         setDragCreate({
           type: fieldType,
           ...(placeholder ? { placeholder } : {}),
+          ...(fieldType === 'date' && dateFormat ? { dateFormat } : {}),
         });
       },
       cancelDragCreate: () => {
@@ -423,6 +427,9 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
             pageWidth={scaledPageWidth}
             {...(dragCreate?.placeholder
               ? { dragCreatePlaceholder: dragCreate.placeholder }
+              : {})}
+            {...(dragCreate?.dateFormat
+              ? { dragCreateDateFormat: dragCreate.dateFormat }
               : {})}
           />
         )}

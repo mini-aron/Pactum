@@ -72,6 +72,13 @@ export {
 } from './validation';
 
 export {
+  dateFormatToRegexPattern,
+  formatDateValue,
+  isIsoDateString,
+  matchesDateFormat,
+} from './format';
+
+export {
   getSourceField,
   getMirrorFields,
   resolveFieldValue,

@@ -16,6 +16,7 @@ export interface ContractCanvasPagesProps {
   readonly mode: ContractMode;
   readonly dragCreateType?: ContractFieldType | null;
   readonly dragCreatePlaceholder?: string;
+  readonly dragCreateDateFormat?: string;
   readonly onDragCreateComplete?: () => void;
   readonly onSignatureRequest?: (fieldId: string, mode: SignatureInputMode) => void;
   readonly onDocumentChange: (next: ContractDocument) => void;
@@ -29,6 +30,7 @@ export function ContractCanvasPages({
   mode,
   dragCreateType = null,
   dragCreatePlaceholder,
+  dragCreateDateFormat,
   onDragCreateComplete,
   onSignatureRequest,
   onDocumentChange,
@@ -40,6 +42,7 @@ export function ContractCanvasPages({
   }
 
   const normalizedDragCreatePlaceholder = dragCreatePlaceholder?.trim();
+  const normalizedDragCreateDateFormat = dragCreateDateFormat?.trim();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
@@ -55,6 +58,9 @@ export function ContractCanvasPages({
           onDocumentChange={onDocumentChange}
           {...(normalizedDragCreatePlaceholder
             ? { dragCreatePlaceholder: normalizedDragCreatePlaceholder }
+            : {})}
+          {...(normalizedDragCreateDateFormat
+            ? { dragCreateDateFormat: normalizedDragCreateDateFormat }
             : {})}
           {...(onSignatureRequest ? { onSignatureRequest } : {})}
           {...(onDragCreateComplete
@@ -73,6 +79,7 @@ function CanvasPageWithFields({
   mode,
   dragCreateType,
   dragCreatePlaceholder,
+  dragCreateDateFormat,
   onDragCreateComplete,
   onSignatureRequest,
   zoom,
@@ -84,6 +91,7 @@ function CanvasPageWithFields({
   readonly mode: ContractMode;
   readonly dragCreateType: ContractFieldType | null;
   readonly dragCreatePlaceholder?: string;
+  readonly dragCreateDateFormat?: string;
   readonly onDragCreateComplete?: () => void;
   readonly onSignatureRequest?: (fieldId: string, mode: SignatureInputMode) => void;
   readonly zoom: number;
@@ -172,6 +180,9 @@ function CanvasPageWithFields({
           width,
           height,
           ...(dragCreatePlaceholder ? { placeholder: dragCreatePlaceholder } : {}),
+          ...(dragCreateType === 'date' && dragCreateDateFormat
+            ? { dateFormat: dragCreateDateFormat }
+            : {}),
         })
       );
       onDragCreateComplete?.();

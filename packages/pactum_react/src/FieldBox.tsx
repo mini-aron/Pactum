@@ -1,7 +1,9 @@
 import type { ContractDocument } from '@pactum/pactum_core';
 import {
   clearFieldValue,
+  formatDateValue,
   getResolvedFieldValue,
+  isIsoDateString,
   isSignatureValue,
   moveField,
   removeField,
@@ -397,6 +399,57 @@ export function FieldBox({
       );
     }
 
+    if (field.type === 'date') {
+      const value = typeof resolved === 'string' ? resolved : '';
+      const inputValue = isIsoDateString(value) ? value : '';
+      const displayValue = value
+        ? formatDateValue(value, field.dateFormat)
+        : (field.placeholder ?? field.dateFormat ?? 'Select date');
+
+      return (
+        <label
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 4px',
+            boxSizing: 'border-box',
+            cursor: 'pointer',
+            color: value ? '#0f172a' : '#64748b',
+          }}
+        >
+          <span
+            style={{
+              fontSize: scaledTextSize,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+            }}
+          >
+            {displayValue}
+          </span>
+          <input
+            type="date"
+            value={inputValue}
+            onChange={(nextEvent) => trySetValue(nextEvent.target.value)}
+            required={field.required}
+            aria-label={field.name}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              opacity: 0,
+              cursor: 'pointer',
+            }}
+          />
+        </label>
+      );
+    }
+
     if (field.type === 'textarea') {
       return (
         <textarea
@@ -431,9 +484,7 @@ export function FieldBox({
               ? 'email'
               : field.type === 'phone'
                 ? 'tel'
-                : field.type === 'date'
-                  ? 'date'
-                  : 'text'
+                : 'text'
         }
         value={
           typeof resolved === 'string' || typeof resolved === 'number' ? resolved : ''
@@ -584,8 +635,10 @@ export function FieldBox({
     ) : null;
 
   const displayText =
-    typeof resolved === 'string' || typeof resolved === 'number'
-      ? String(resolved)
+    field.type === 'date' && typeof resolved === 'string'
+      ? formatDateValue(resolved, field.dateFormat)
+      : typeof resolved === 'string' || typeof resolved === 'number'
+        ? String(resolved)
       : resolved === true
         ? 'X'
         : '';

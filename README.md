@@ -71,6 +71,18 @@ const next = createField(document, {
   textSize: 12,
   borderRadius: 4,
 });
+
+const withStartDate = createField(next, {
+  id: 'startDate',
+  name: 'Start Date',
+  type: 'date',
+  dateFormat: 'yyyy.mm.dd',
+  page: 0,
+  x: 0.1,
+  y: 0.28,
+  width: 0.25,
+  height: 0.05,
+});
 ```
 
 ### 2) Render in React
@@ -144,7 +156,13 @@ For builder drag-create flows, pass an optional placeholder when starting field 
 viewerRef.current?.beginDragCreate('text', {
   placeholder: 'Enter employee name',
 });
+
+viewerRef.current?.beginDragCreate('date', {
+  dateFormat: 'yyyy.mm.dd',
+});
 ```
+
+Date fields use the native date picker and store the selected value as `yyyy-mm-dd`. When `dateFormat` is set, the viewer and PDF export render the selected date in that format. Supported date tokens are `yyyy`, `yy`, `mm`/`MM`, and `dd`.
 
 When `signatureMode` is set, UI input and external API writes are both constrained:
 - `sign-only`: drawing only

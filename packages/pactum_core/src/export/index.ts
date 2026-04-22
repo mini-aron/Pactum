@@ -11,6 +11,7 @@ import type { ContractFieldValue } from '../types/value';
 import { isSignatureValue } from '../types/value';
 import { resolveFieldValue } from '../shared';
 import { toAbsoluteRect } from '../coordinates';
+import { formatDateValue } from '../format';
 
 interface PageDimension {
   readonly width: number;
@@ -127,7 +128,13 @@ const renderField = async (
   }
 
   if (typeof value === 'string' && value.trim() !== '') {
-    drawTextField(page, field, value, font, pageDim);
+    drawTextField(
+      page,
+      field,
+      field.type === 'date' ? formatDateValue(value, field.dateFormat) : value,
+      font,
+      pageDim
+    );
     return;
   }
 

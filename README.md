@@ -43,6 +43,8 @@ pnpm clean
 
 ## Quick Start
 
+For detailed library usage, return examples, field types, validation output, and React viewer APIs, see [`docs/USAGE.md`](docs/USAGE.md).
+
 ### 1) Build a document with core
 
 ```ts

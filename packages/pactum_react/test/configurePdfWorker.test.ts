@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const defaultWorkerSrc =
-  'https://unpkg.com/pdfjs-dist@4.0.0/build/pdf.worker.min.mjs';
-
 async function loadModule() {
   vi.resetModules();
 
@@ -30,15 +27,15 @@ describe('configurePdfWorker', () => {
 
     configurePdfWorker();
 
-    expect(globalWorkerOptions.workerSrc).toBe(defaultWorkerSrc);
+    expect(globalWorkerOptions.workerSrc).toBe('');
   });
 
-  it('resets to the default worker after a custom workerSrc was used', async () => {
+  it('leaves a previously configured worker untouched when no workerSrc is provided', async () => {
     const { configurePdfWorker, globalWorkerOptions } = await loadModule();
 
     configurePdfWorker('https://cdn.example.com/pdf.worker.min.mjs');
     configurePdfWorker();
 
-    expect(globalWorkerOptions.workerSrc).toBe(defaultWorkerSrc);
+    expect(globalWorkerOptions.workerSrc).toBe('https://cdn.example.com/pdf.worker.min.mjs');
   });
 });

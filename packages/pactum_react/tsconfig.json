@@ -1,8 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "@pactum-labs/core": ["packages/pactum_core/src/index.ts"],
+      "@pactum-labs/react": ["packages/pactum_react/src/index.ts"]
+    },
     "jsx": "react-jsx",
-    "rootDir": ".",
     "outDir": "./dist"
   },
   "include": ["src", "test"]

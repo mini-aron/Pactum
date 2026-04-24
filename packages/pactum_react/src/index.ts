@@ -26,7 +26,7 @@ export type { ContractPdfPagesProps, PdfFileSource } from './ContractPdfPages';
 export { ContractPdfPages } from './ContractPdfPages';
 
 export type { RenderedPage } from './pageSource';
-export { loadRenderedPages } from './pageSource';
+export { getDocumentPageCount, loadRenderedPage } from './pageSource';
 
 export type { FieldBoxProps } from './FieldBox';
 export { FieldBox } from './FieldBox';

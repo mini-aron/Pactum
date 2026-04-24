@@ -1,8 +1,13 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "paths": {
+      "@pactum-labs/core": ["packages/pactum_core/src/index.ts"],
+      "@pactum-labs/react": ["packages/pactum_react/src/index.ts"]
+    },
     "lib": ["ES2022", "DOM"],
     "strict": true,
     "exactOptionalPropertyTypes": true,

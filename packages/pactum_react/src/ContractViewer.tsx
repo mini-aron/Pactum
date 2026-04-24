@@ -20,7 +20,15 @@ import SignatureCanvasImport from 'react-signature-canvas';
 import type { ContractMode } from './ContractMode';
 import { ContractCanvasPages } from './ContractCanvasPages';
 import { configurePdfWorker } from './configurePdfWorker';
-import { loadRenderedPages, type RenderedPage } from './pageSource';
+import {
+  MAX_SIGNATURE_IMAGE_BYTES,
+  toValidatedSignatureImage,
+} from './imageGuards';
+import {
+  getDocumentPageCount,
+  loadRenderedPage,
+  type RenderedPage,
+} from './pageSource';
 
 export interface ContractViewerProps {
   readonly mode: ContractMode;
@@ -28,6 +36,7 @@ export interface ContractViewerProps {
   readonly onDocumentChange: (next: ContractDocument) => void;
   readonly pageWidth?: number;
   readonly viewportHeight?: number | string;
+  readonly showPageNavigation?: boolean;
   readonly pdfWorkerSrc?: string;
   className?: string;
   style?: CSSProperties;
@@ -39,6 +48,11 @@ export interface ContractViewerHandle {
     options?: ContractViewerDragCreateOptions
   ) => void;
   cancelDragCreate: () => void;
+  goToPage: (pageIndex: number) => void;
+  nextPage: () => void;
+  previousPage: () => void;
+  getActivePageIndex: () => number;
+  getPageCount: () => number;
   setFieldImage: (fieldId: string, image: ContractViewerImageInput) => void;
   setSignatureImage: (fieldId: string, image: ContractViewerBinaryImageInput) => void;
   setStampImage: (fieldId: string, image: ContractViewerBinaryImageInput) => void;
@@ -77,35 +91,24 @@ function resolveSignatureMode(field: SignatureField): SignatureInputMode {
   return field.signatureMode ?? 'all';
 }
 
-function toUint8Array(image: Uint8Array | ArrayBuffer): Uint8Array {
-  if (image instanceof Uint8Array) {
-    return Uint8Array.from(image);
-  }
-  return new Uint8Array(image.slice(0));
-}
-
 function normalizeOptionalText(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
 }
 
-/**
- * Canvas-based contract page viewer with field overlays.
- * The parent owns `ContractDocument` state and passes updates via `onDocumentChange`.
- */
 export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerProps>(function ContractViewer({
   mode,
   document,
   onDocumentChange,
   pageWidth,
   viewportHeight = '80vh',
+  showPageNavigation = false,
   pdfWorkerSrc,
   className,
   style,
 }: ContractViewerProps, ref): JSX.Element {
-  const pageImages =
-    'pageImages' in document ? document.pageImages : undefined;
   const [zoom, setZoom] = useState(1);
+  const [activePageIndex, setActivePageIndex] = useState(0);
   const [dragCreate, setDragCreate] = useState<{
     type: ContractFieldType;
     placeholder?: string;
@@ -115,9 +118,10 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
     fieldId: string;
     mode: SignatureInputMode;
   } | null>(null);
-  const [pages, setPages] = useState<RenderedPage[]>([]);
-  const [isLoadingPages, setIsLoadingPages] = useState(false);
+  const [page, setPage] = useState<RenderedPage | null>(null);
+  const [isLoadingPage, setIsLoadingPage] = useState(false);
   const [pageLoadError, setPageLoadError] = useState<string | null>(null);
+  const [signatureError, setSignatureError] = useState<string | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
   const panRef = useRef({
@@ -129,6 +133,12 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
   });
   const signaturePadRef = useRef<InstanceType<typeof SignatureCanvas> | null>(null);
   const stampUploadInputRef = useRef<HTMLInputElement>(null);
+
+  const pageCount = getDocumentPageCount(document);
+  const clampPageIndex = useCallback((pageIndex: number) => {
+    if (pageCount <= 0) return 0;
+    return Math.max(0, Math.min(pageCount - 1, Math.floor(pageIndex)));
+  }, [pageCount]);
 
   const applyFieldImage = useCallback((fieldId: string, input: ContractViewerImageInput) => {
     const field = document.fields.find((candidate) => candidate.id === fieldId);
@@ -148,15 +158,17 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
       throw new Error(`Field "${fieldId}" allows stamp upload only.`);
     }
 
+    const normalized = toValidatedSignatureImage(input);
     const value: ContractFieldValue = {
       type: 'signature',
       source,
-      image: toUint8Array(input.image),
-      ...(input.mimeType ? { mimeType: input.mimeType } : {}),
-      ...(typeof input.width === 'number' ? { width: input.width } : {}),
-      ...(typeof input.height === 'number' ? { height: input.height } : {}),
+      image: normalized.image,
+      ...(normalized.mimeType ? { mimeType: normalized.mimeType } : {}),
+      ...(typeof normalized.width === 'number' ? { width: normalized.width } : {}),
+      ...(typeof normalized.height === 'number' ? { height: normalized.height } : {}),
     };
     onDocumentChange(setFieldValue(document, fieldId, value));
+    setSignatureError(null);
     if (activeSignatureRequest?.fieldId === fieldId) {
       setActiveSignatureRequest(null);
       signaturePadRef.current?.clear();
@@ -172,6 +184,22 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
       setDragCreate(null);
     }
   }, [dragCreate, mode]);
+
+  useEffect(() => {
+    setActivePageIndex((prev) => clampPageIndex(prev));
+  }, [clampPageIndex]);
+
+  const goToPage = useCallback((pageIndex: number) => {
+    setActivePageIndex(clampPageIndex(pageIndex));
+  }, [clampPageIndex]);
+
+  const nextPage = useCallback(() => {
+    setActivePageIndex((prev) => clampPageIndex(prev + 1));
+  }, [clampPageIndex]);
+
+  const previousPage = useCallback(() => {
+    setActivePageIndex((prev) => clampPageIndex(prev - 1));
+  }, [clampPageIndex]);
 
   useImperativeHandle(
     ref,
@@ -191,6 +219,11 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
       cancelDragCreate: () => {
         setDragCreate(null);
       },
+      goToPage,
+      nextPage,
+      previousPage,
+      getActivePageIndex: () => activePageIndex,
+      getPageCount: () => pageCount,
       setFieldImage: (fieldId: string, image: ContractViewerImageInput) => {
         applyFieldImage(fieldId, image);
       },
@@ -201,30 +234,30 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
         applyFieldImage(fieldId, { ...image, source: 'stamp' });
       },
     }),
-    [applyFieldImage]
+    [activePageIndex, applyFieldImage, goToPage, nextPage, pageCount, previousPage]
   );
 
   useEffect(() => {
     const controller = new AbortController();
-    setIsLoadingPages(true);
+    setIsLoadingPage(true);
     setPageLoadError(null);
 
-    void loadRenderedPages(document, controller.signal)
-      .then((nextPages) => {
+    void loadRenderedPage(document, activePageIndex, controller.signal)
+      .then((nextPage) => {
         if (controller.signal.aborted) {
-          nextPages.forEach((page) => page.dispose?.());
+          nextPage.dispose?.();
           return;
         }
-        setPages((prevPages) => {
-          prevPages.forEach((page) => page.dispose?.());
-          return nextPages;
+        setPage((prevPage) => {
+          prevPage?.dispose?.();
+          return nextPage;
         });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setPages((prevPages) => {
-          prevPages.forEach((page) => page.dispose?.());
-          return [];
+        setPage((prevPage) => {
+          prevPage?.dispose?.();
+          return null;
         });
         setPageLoadError(
           error instanceof Error ? error.message : 'Failed to load document pages.'
@@ -232,13 +265,19 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
       })
       .finally(() => {
         if (controller.signal.aborted) return;
-        setIsLoadingPages(false);
+        setIsLoadingPage(false);
       });
 
     return () => {
       controller.abort();
     };
-  }, [document.pdfData, pageImages]);
+  }, [activePageIndex, document]);
+
+  useEffect(() => {
+    return () => {
+      page?.dispose?.();
+    };
+  }, [page]);
 
   const basePageWidth = pageWidth ?? 720;
   const scaledPageWidth = Math.round(basePageWidth * zoom);
@@ -313,11 +352,17 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
     const fieldId = activeSignatureRequest?.fieldId;
     const pad = signaturePadRef.current;
     if (!fieldId || !pad || pad.isEmpty()) return;
-    applyFieldImage(fieldId, {
-      source: 'draw',
-      image: dataUrlToUint8Array(pad.toDataURL('image/png')),
-      mimeType: 'image/png',
-    });
+    try {
+      applyFieldImage(fieldId, {
+        source: 'draw',
+        image: dataUrlToUint8Array(pad.toDataURL('image/png')),
+        mimeType: 'image/png',
+      });
+    } catch (error) {
+      setSignatureError(
+        error instanceof Error ? error.message : 'Failed to save signature image.'
+      );
+    }
   }, [activeSignatureRequest, applyFieldImage]);
 
   const onStampUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,20 +371,32 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
     event.target.value = '';
     if (!fieldId || !file) return;
 
-    const image = new Uint8Array(await file.arrayBuffer());
-    applyFieldImage(fieldId, {
-      source: 'stamp',
-      image,
-      ...(file.type ? { mimeType: file.type } : {}),
-    });
+    if (file.size > MAX_SIGNATURE_IMAGE_BYTES) {
+      setSignatureError(
+        `Image files must be ${Math.floor(MAX_SIGNATURE_IMAGE_BYTES / (1024 * 1024))} MB or smaller.`
+      );
+      return;
+    }
+
+    try {
+      const image = new Uint8Array(await file.arrayBuffer());
+      applyFieldImage(fieldId, {
+        source: 'stamp',
+        image,
+        ...(file.type ? { mimeType: file.type } : {}),
+      });
+    } catch (error) {
+      setSignatureError(
+        error instanceof Error ? error.message : 'Failed to upload stamp image.'
+      );
+    }
   }, [activeSignatureRequest, applyFieldImage]);
 
   return (
     <div
       className={className}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        position: 'relative',
         height: viewportHeight,
         minHeight: 0,
         ...style,
@@ -351,10 +408,13 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
           justifyContent: 'flex-end',
           alignItems: 'center',
           gap: 6,
-          marginBottom: 10,
-          position: 'sticky',
+          position: 'absolute',
+          left: 0,
+          right: 0,
           top: 8,
           zIndex: 5,
+          paddingInline: 8,
+          pointerEvents: 'none',
         }}
       >
         <div
@@ -366,8 +426,55 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
             borderRadius: 999,
             background: 'rgba(255,255,255,0.9)',
             border: '1px solid rgba(148, 163, 184, 0.35)',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
+            pointerEvents: 'auto',
           }}
         >
+          {showPageNavigation && pageCount > 1 ? (
+            <>
+              <RoundIconButton
+                ariaLabel="Previous page"
+                onClick={previousPage}
+                disabled={activePageIndex <= 0}
+              >
+                <ChevronLeftIcon />
+              </RoundIconButton>
+              <button
+                type="button"
+                onClick={() => goToPage(activePageIndex)}
+                style={{
+                  minWidth: 62,
+                  height: 30,
+                  borderRadius: 999,
+                  border: '1px solid rgba(148, 163, 184, 0.35)',
+                  background: 'rgba(248, 250, 252, 0.9)',
+                  color: '#0f172a',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'default',
+                  letterSpacing: 0.2,
+                }}
+                aria-label="Current page"
+              >
+                {activePageIndex + 1}/{pageCount}
+              </button>
+              <RoundIconButton
+                ariaLabel="Next page"
+                onClick={nextPage}
+                disabled={activePageIndex >= pageCount - 1}
+              >
+                <ChevronRightIcon />
+              </RoundIconButton>
+              <div
+                style={{
+                  width: 1,
+                  height: 20,
+                  background: 'rgba(148, 163, 184, 0.35)',
+                  marginInline: 2,
+                }}
+              />
+            </>
+          ) : null}
           <RoundIconButton
             ariaLabel="Zoom out"
             onClick={onZoomOut}
@@ -412,7 +519,7 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
         onPointerLeave={onViewportPointerUp}
         style={{
           width: '100%',
-          flex: 1,
+          height: '100%',
           minHeight: 0,
           overflow: 'auto',
           cursor:
@@ -428,18 +535,15 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
         }}
       >
         {pageLoadError ? (
-          <div
-            role="alert"
-            style={{ padding: 12, color: '#991b1b', fontSize: 13 }}
-          >
+          <div role="alert" style={{ padding: 12, color: '#991b1b', fontSize: 13 }}>
             Failed to load pages: {pageLoadError}
           </div>
         ) : null}
-        {isLoadingPages && pages.length === 0 ? (
-          <span style={{ padding: 8 }}>Loading pages…</span>
+        {isLoadingPage && page === null ? (
+          <span style={{ padding: 8 }}>Loading page...</span>
         ) : (
           <ContractCanvasPages
-            pages={pages}
+            page={page}
             document={document}
             mode={mode}
             dragCreateType={dragCreate?.type ?? null}
@@ -485,6 +589,14 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
               Signature Pad ({activeSignatureRequest.fieldId})
             </div>
+            {signatureError ? (
+              <div
+                role="alert"
+                style={{ marginBottom: 8, color: '#991b1b', fontSize: 12 }}
+              >
+                {signatureError}
+              </div>
+            ) : null}
             {activeSignatureRequest.mode !== 'stamp-only' ? (
               <div
                 style={{
@@ -559,6 +671,7 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
                 type="button"
                 onClick={() => {
                   setActiveSignatureRequest(null);
+                  setSignatureError(null);
                   signaturePadRef.current?.clear();
                 }}
                 style={inlineActionButtonStyle()}
@@ -638,6 +751,34 @@ function MinusIcon(): JSX.Element {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
       <path d="M1.25 6H10.75" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon(): JSX.Element {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path
+        d="M7.75 2.25L4 6L7.75 9.75"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronRightIcon(): JSX.Element {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path
+        d="M4.25 2.25L8 6L4.25 9.75"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

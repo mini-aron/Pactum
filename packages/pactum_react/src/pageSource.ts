@@ -1,18 +1,31 @@
 import type { ContractDocument } from '@pactum-labs/core';
 import { pdfjs } from 'react-pdf';
+import { isPdfWorkerConfigured } from './configurePdfWorker';
 
 export interface RenderedPage {
   readonly index: number;
   readonly width: number;
   readonly height: number;
-  readonly image: CanvasImageSource;
+  readonly surface: HTMLCanvasElement | HTMLImageElement;
   readonly dispose?: () => void;
 }
+
+type PageImageDocument = ContractDocument & {
+  readonly pageImages?: readonly Uint8Array[];
+};
 
 const throwIfAborted = (signal?: AbortSignal): void => {
   if (signal?.aborted) {
     throw new DOMException('Page rendering aborted.', 'AbortError');
   }
+};
+
+const assertPdfWorkerConfigured = (): void => {
+  if (isPdfWorkerConfigured()) return;
+
+  throw new Error(
+    'PDF rendering requires a configured pdf.js worker. Pass `pdfWorkerSrc` to ContractViewer or call configurePdfWorker(...) before rendering PDF-backed pages.'
+  );
 };
 
 const detectImageMimeType = (bytes: Uint8Array): string => {
@@ -47,127 +60,148 @@ const detectImageMimeType = (bytes: Uint8Array): string => {
   return 'image/png';
 };
 
+const disposeRenderedPage = (page: RenderedPage | null | undefined): void => {
+  page?.dispose?.();
+};
+
+export const disposeRenderedPages = (pages: readonly RenderedPage[]): void => {
+  pages.forEach((page) => page.dispose?.());
+};
+
 const decodeImage = async (
   bytes: Uint8Array,
+  index: number,
   signal?: AbortSignal
 ): Promise<RenderedPage> => {
   throwIfAborted(signal);
-  const mimeType = detectImageMimeType(bytes);
-  const normalized = Uint8Array.from(bytes);
-  const blob = new Blob([normalized], { type: mimeType });
+  const blob = new Blob([Uint8Array.from(bytes)], { type: detectImageMimeType(bytes) });
   const objectUrl = URL.createObjectURL(blob);
+  let completed = false;
+
   try {
     const image = new Image();
     image.decoding = 'async';
     image.src = objectUrl;
     await image.decode();
     throwIfAborted(signal);
+    completed = true;
 
     return {
-      index: 0,
+      index,
       width: image.naturalWidth,
       height: image.naturalHeight,
-      image,
+      surface: image,
+      dispose: () => {
+        image.src = '';
+        URL.revokeObjectURL(objectUrl);
+      },
     };
   } finally {
-    URL.revokeObjectURL(objectUrl);
+    if (!completed) {
+      URL.revokeObjectURL(objectUrl);
+    }
   }
 };
 
-const renderPdfPages = async (
+const renderPdfPage = async (
   pdfData: Uint8Array,
+  pageIndex: number,
   signal?: AbortSignal
-): Promise<RenderedPage[]> => {
+): Promise<RenderedPage> => {
   throwIfAborted(signal);
-  // pdf.js may transfer the underlying ArrayBuffer to the worker.
-  // Use a fresh copy so the document model keeps an intact buffer for future renders.
   const loadingTask = pdfjs.getDocument({ data: Uint8Array.from(pdfData) });
   const cancelLoading = () => {
     void loadingTask.destroy();
   };
   signal?.addEventListener('abort', cancelLoading, { once: true });
 
+  let renderedPage: RenderedPage | null = null;
+
   try {
     const pdf = await loadingTask.promise;
-    const pages: RenderedPage[] = [];
 
     try {
-      for (let i = 1; i <= pdf.numPages; i += 1) {
-        throwIfAborted(signal);
+      const page = await pdf.getPage(pageIndex + 1);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(viewport.width));
+      canvas.height = Math.max(1, Math.round(viewport.height));
+      const context = canvas.getContext('2d');
 
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(viewport.width));
-        canvas.height = Math.max(1, Math.round(viewport.height));
-        const context = canvas.getContext('2d');
-
-        if (!context) {
-          page.cleanup();
-          continue;
-        }
-
-        const renderTask = page.render({
-          canvasContext: context,
-          viewport,
-        });
-        const cancelRender = () => {
-          renderTask.cancel();
-        };
-        signal?.addEventListener('abort', cancelRender, { once: true });
-
-        try {
-          await renderTask.promise;
-          throwIfAborted(signal);
-        } finally {
-          signal?.removeEventListener('abort', cancelRender);
-          page.cleanup();
-        }
-
-        pages.push({
-          index: i - 1,
-          width: canvas.width,
-          height: canvas.height,
-          image: canvas,
-          dispose: () => {
-            canvas.width = 0;
-            canvas.height = 0;
-          },
-        });
+      if (!context) {
+        page.cleanup();
+        throw new Error(`Failed to create a rendering context for page ${pageIndex}.`);
       }
 
-      return pages;
+      const renderTask = page.render({
+        canvasContext: context,
+        viewport,
+      });
+      const cancelRender = () => {
+        renderTask.cancel();
+      };
+      signal?.addEventListener('abort', cancelRender, { once: true });
+
+      try {
+        await renderTask.promise;
+        throwIfAborted(signal);
+      } finally {
+        signal?.removeEventListener('abort', cancelRender);
+        page.cleanup();
+      }
+
+      renderedPage = {
+        index: pageIndex,
+        width: canvas.width,
+        height: canvas.height,
+        surface: canvas,
+        dispose: () => {
+          canvas.width = 0;
+          canvas.height = 0;
+        },
+      };
+
+      return renderedPage;
     } finally {
       await pdf.destroy();
     }
+  } catch (error) {
+    disposeRenderedPage(renderedPage);
+    throw error;
   } finally {
     signal?.removeEventListener('abort', cancelLoading);
   }
 };
 
-export const loadRenderedPages = async (
-  documentModel: ContractDocument,
-  signal?: AbortSignal
-): Promise<RenderedPage[]> => {
-  const pageImages =
-    'pageImages' in documentModel
-      ? (
-          documentModel as ContractDocument & {
-            readonly pageImages?: readonly Uint8Array[];
-          }
-        ).pageImages
-      : undefined;
+export const getDocumentPageCount = (documentModel: ContractDocument): number =>
+  Math.max(0, documentModel.pageCount);
 
-  if (pageImages && pageImages.length > 0) {
-    const decoded = await Promise.all(
-      pageImages.map(async (bytes: Uint8Array, index: number) => {
-        const page = await decodeImage(bytes, signal);
-        return { ...page, index };
-      })
-    );
-    return decoded;
+export const loadRenderedPage = async (
+  documentModel: ContractDocument,
+  pageIndex: number,
+  signal?: AbortSignal
+): Promise<RenderedPage> => {
+  if (pageIndex < 0 || pageIndex >= documentModel.pageCount) {
+    throw new Error(`Page ${pageIndex} is outside the document page range.`);
   }
 
-  return renderPdfPages(documentModel.pdfData, signal);
-};
+  const pageImages =
+    'pageImages' in documentModel
+      ? (documentModel as PageImageDocument).pageImages
+      : undefined;
+  const pageImage = pageImages?.[pageIndex];
 
+  if (pageImage) {
+    try {
+      return await decodeImage(pageImage, pageIndex, signal);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        assertPdfWorkerConfigured();
+      }
+      throw error;
+    }
+  }
+
+  assertPdfWorkerConfigured();
+  return renderPdfPage(documentModel.pdfData, pageIndex, signal);
+};

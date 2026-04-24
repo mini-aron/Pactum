@@ -11,7 +11,7 @@ import { FieldBox } from './FieldBox';
 import type { RenderedPage } from './pageSource';
 
 export interface ContractCanvasPagesProps {
-  readonly pages: readonly RenderedPage[];
+  readonly page: RenderedPage | null;
   readonly document: ContractDocument;
   readonly mode: ContractMode;
   readonly dragCreateType?: ContractFieldType | null;
@@ -25,7 +25,7 @@ export interface ContractCanvasPagesProps {
 }
 
 export function ContractCanvasPages({
-  pages,
+  page,
   document,
   mode,
   dragCreateType = null,
@@ -37,16 +37,12 @@ export function ContractCanvasPages({
   pageWidth = 720,
   zoom = 1,
 }: ContractCanvasPagesProps): JSX.Element {
-  if (pages.length === 0) {
-    return <span style={{ padding: 8 }}>Loading pages…</span>;
-  }
-
   const normalizedDragCreatePlaceholder = dragCreatePlaceholder?.trim();
   const normalizedDragCreateDateFormat = dragCreateDateFormat?.trim();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-      {pages.map((page) => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {page ? (
         <CanvasPageWithFields
           key={page.index}
           page={page}
@@ -63,11 +59,11 @@ export function ContractCanvasPages({
             ? { dragCreateDateFormat: normalizedDragCreateDateFormat }
             : {})}
           {...(onSignatureRequest ? { onSignatureRequest } : {})}
-          {...(onDragCreateComplete
-            ? { onDragCreateComplete }
-            : {})}
+          {...(onDragCreateComplete ? { onDragCreateComplete } : {})}
         />
-      ))}
+      ) : (
+        <span style={{ padding: 8 }}>Loading page...</span>
+      )}
     </div>
   );
 }
@@ -98,7 +94,7 @@ function CanvasPageWithFields({
   readonly onDocumentChange: (next: ContractDocument) => void;
 }): JSX.Element {
   const overlayRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const surfaceHostRef = useRef<HTMLDivElement>(null);
   const [draftRect, setDraftRect] = useState<{
     x: number;
     y: number;
@@ -113,16 +109,21 @@ function CanvasPageWithFields({
   }, [page.height, page.width, pageWidth]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext('2d');
-    if (!context) return;
+    const host = surfaceHostRef.current;
+    const surface = page.surface;
+    if (!host) return;
 
-    canvas.width = page.width;
-    canvas.height = page.height;
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(page.image, 0, 0, canvas.width, canvas.height);
-  }, [page.height, page.image, page.width]);
+    surface.style.width = '100%';
+    surface.style.height = '100%';
+    surface.style.display = 'block';
+    host.replaceChildren(surface);
+
+    return () => {
+      if (host.contains(surface)) {
+        host.replaceChildren();
+      }
+    };
+  }, [page.surface]);
 
   const onCreatePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== 'builder' || dragCreateType === null) return;
@@ -193,13 +194,21 @@ function CanvasPageWithFields({
   };
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block', width: pageWidth, height: displayHeight }}>
-      <canvas
-        ref={canvasRef}
+    <div
+      style={{
+        position: 'relative',
+        display: 'inline-block',
+        width: pageWidth,
+        height: displayHeight,
+      }}
+    >
+      <div
+        ref={surfaceHostRef}
         style={{
           width: '100%',
           height: '100%',
           display: 'block',
+          background: '#fff',
         }}
       />
       <div
@@ -249,4 +258,3 @@ function CanvasPageWithFields({
     </div>
   );
 }
-

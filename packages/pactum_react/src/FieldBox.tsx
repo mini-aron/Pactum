@@ -24,6 +24,10 @@ import {
   type RefObject,
 } from 'react';
 import type { ContractMode } from './ContractMode';
+import {
+  MAX_SIGNATURE_IMAGE_BYTES,
+  toValidatedSignatureImage,
+} from './imageGuards';
 
 export interface FieldBoxProps {
   readonly field: ContractField;
@@ -61,6 +65,43 @@ function createMediaUrl(value: ContractFieldValue | undefined): string | null {
     type: value.mimeType ?? 'image/png',
   });
   return URL.createObjectURL(blob);
+}
+
+type NumberInputValueState =
+  | { readonly kind: 'empty' }
+  | { readonly kind: 'intermediate' }
+  | { readonly kind: 'number'; readonly value: number };
+
+function getNumberInputDraft(value: ContractFieldValue | undefined): string {
+  return typeof value === 'number' || typeof value === 'string' ? String(value) : '';
+}
+
+function parseNumberInputValue(
+  rawValue: string,
+  valueAsNumber: number
+): NumberInputValueState {
+  const normalized = rawValue.trim();
+  if (normalized === '') {
+    return { kind: 'empty' };
+  }
+
+  if (
+    normalized === '-' ||
+    normalized === '+' ||
+    normalized === '.' ||
+    normalized === '-.' ||
+    normalized === '+.' ||
+    /[eE][+-]?$/.test(normalized) ||
+    normalized.endsWith('.')
+  ) {
+    return { kind: 'intermediate' };
+  }
+
+  if (Number.isFinite(valueAsNumber)) {
+    return { kind: 'number', value: valueAsNumber };
+  }
+
+  return { kind: 'intermediate' };
 }
 
 function MediaActions({
@@ -136,6 +177,8 @@ export function FieldBox({
     height: number;
   } | null>(null);
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
+  const [numberDraft, setNumberDraft] = useState(() => getNumberInputDraft(resolved));
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const rect = preview ?? {
     x: field.x,
@@ -200,6 +243,11 @@ export function FieldBox({
   }, [resolved]);
 
   useEffect(() => {
+    if (field.type !== 'number') return;
+    setNumberDraft(getNumberInputDraft(resolved));
+  }, [field.id, field.type, resolved]);
+
+  useEffect(() => {
     if (!isMediaField(field)) return;
 
     if (!canEditMedia) {
@@ -216,6 +264,7 @@ export function FieldBox({
     (value: ContractFieldValue) => {
       try {
         onDocumentChange(setFieldValue(document, field.id, value));
+        setMediaError(null);
       } catch {
         /* mirror or read-only */
       }
@@ -227,6 +276,7 @@ export function FieldBox({
     try {
       onDocumentChange(clearFieldValue(document, field.id));
       setIsEditingMedia(false);
+      setMediaError(null);
     } catch {
       /* mirror or read-only */
     }
@@ -361,14 +411,31 @@ export function FieldBox({
     event.target.value = '';
     if (!file) return;
 
-    const image = new Uint8Array(await file.arrayBuffer());
-    trySetValue({
-      type: 'signature',
-      source: 'stamp',
-      image,
-      ...(file.type ? { mimeType: file.type } : {}),
-    });
-    setIsEditingMedia(false);
+    if (file.size > MAX_SIGNATURE_IMAGE_BYTES) {
+      setMediaError(
+        `Image files must be ${Math.floor(MAX_SIGNATURE_IMAGE_BYTES / (1024 * 1024))} MB or smaller.`
+      );
+      return;
+    }
+
+    try {
+      const normalized = toValidatedSignatureImage({
+        source: 'stamp',
+        image: new Uint8Array(await file.arrayBuffer()),
+        ...(file.type ? { mimeType: file.type } : {}),
+      });
+      trySetValue({
+        type: 'signature',
+        source: 'stamp',
+        image: normalized.image,
+        ...(normalized.mimeType ? { mimeType: normalized.mimeType } : {}),
+      });
+      setIsEditingMedia(false);
+    } catch (error) {
+      setMediaError(
+        error instanceof Error ? error.message : 'Failed to upload stamp image.'
+      );
+    }
   };
 
   const input = useMemo(() => {
@@ -487,16 +554,54 @@ export function FieldBox({
                 : 'text'
         }
         value={
-          typeof resolved === 'string' || typeof resolved === 'number' ? resolved : ''
+          field.type === 'number'
+            ? numberDraft
+            : typeof resolved === 'string' || typeof resolved === 'number'
+              ? resolved
+              : ''
         }
         onChange={(nextEvent) => {
           if (field.type === 'number') {
-            const value = Number(nextEvent.target.value);
-            trySetValue(Number.isFinite(value) ? value : 0);
+            const rawValue = nextEvent.target.value;
+            setNumberDraft(rawValue);
+            const value = parseNumberInputValue(
+              rawValue,
+              nextEvent.target.valueAsNumber
+            );
+            if (value.kind === 'empty') {
+              tryClearValue();
+              return;
+            }
+            if (value.kind === 'number') {
+              trySetValue(value.value);
+            }
             return;
           }
 
           trySetValue(nextEvent.target.value);
+        }}
+        onBlur={(nextEvent) => {
+          if (field.type !== 'number') return;
+
+          const value = parseNumberInputValue(
+            nextEvent.target.value,
+            nextEvent.target.valueAsNumber
+          );
+
+          if (value.kind === 'empty') {
+            setNumberDraft('');
+            tryClearValue();
+            return;
+          }
+
+          if (value.kind === 'number') {
+            const normalized = String(value.value);
+            setNumberDraft(normalized);
+            trySetValue(value.value);
+            return;
+          }
+
+          setNumberDraft(getNumberInputDraft(resolved));
         }}
         required={field.required}
         placeholder={field.placeholder}
@@ -513,7 +618,7 @@ export function FieldBox({
         }}
       />
     );
-  }, [canEditValue, field, resolved, scaledTextSize, trySetValue]);
+  }, [canEditValue, field, numberDraft, resolved, scaledTextSize, tryClearValue, trySetValue]);
 
   const stampEditor =
     field.type === 'signature' &&
@@ -545,6 +650,14 @@ export function FieldBox({
         <span style={{ textAlign: 'center', fontSize: scaledTextSize }}>
           Upload stamp image
         </span>
+        {mediaError ? (
+          <span
+            role="alert"
+            style={{ marginTop: 8, textAlign: 'center', fontSize: 11, color: '#991b1b' }}
+          >
+            {mediaError}
+          </span>
+        ) : null}
       </label>
     ) : null;
 
@@ -849,3 +962,5 @@ function editorButtonStyle(tone: 'primary' | 'default' = 'default'): CSSProperti
     background: tone === 'primary' ? 'rgba(37, 99, 235, 0.92)' : 'rgba(255, 255, 255, 0.96)',
   };
 }
+
+export { parseNumberInputValue };

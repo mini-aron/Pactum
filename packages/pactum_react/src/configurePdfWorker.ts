@@ -2,16 +2,19 @@ import { pdfjs } from 'react-pdf';
 
 let configuredWorkerSrc: string | null = null;
 
-function getDefaultWorkerSrc(): string {
-  return `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+export function isPdfWorkerConfigured(): boolean {
+  return typeof pdfjs.GlobalWorkerOptions.workerSrc === 'string'
+    && pdfjs.GlobalWorkerOptions.workerSrc.trim().length > 0;
 }
 
 /**
  * Configure the PDF.js worker URL. Call once when the app starts.
- * If `workerSrc` is omitted, a version-matched worker is loaded from unpkg.
+ * Pactum does not load a default worker from a remote CDN.
  */
 export function configurePdfWorker(workerSrc?: string): void {
-  const nextWorkerSrc = workerSrc ?? getDefaultWorkerSrc();
+  const nextWorkerSrc = workerSrc?.trim();
+
+  if (!nextWorkerSrc) return;
 
   if (configuredWorkerSrc === nextWorkerSrc) return;
 

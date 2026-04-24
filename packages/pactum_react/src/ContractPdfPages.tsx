@@ -2,12 +2,12 @@ import type { ContractDocument } from '@pactum-labs/core';
 import { useEffect, useState } from 'react';
 import type { ContractMode } from './ContractMode';
 import { ContractCanvasPages } from './ContractCanvasPages';
-import { loadRenderedPages, type RenderedPage } from './pageSource';
+import {
+  getDocumentPageCount,
+  loadRenderedPage,
+  type RenderedPage,
+} from './pageSource';
 
-/**
- * @deprecated Kept for compatibility. Prefer `ContractCanvasPages`.
- * `file` is ignored and pages are resolved from `document` internally.
- */
 export type PdfFileSource = unknown;
 
 export interface ContractPdfPagesProps {
@@ -27,6 +27,12 @@ export function ContractPdfPages({
   pageWidth = 720,
   zoom = 1,
 }: ContractPdfPagesProps): JSX.Element {
+  const [activePageIndex, setActivePageIndex] = useState(0);
+  const [page, setPage] = useState<RenderedPage | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const pageCount = getDocumentPageCount(document);
+
   useEffect(() => {
     if (file === undefined || file === null) return;
     console.warn(
@@ -34,33 +40,31 @@ export function ContractPdfPages({
     );
   }, [file]);
 
-  const pageImages =
-    'pageImages' in document ? document.pageImages : undefined;
-  const [pages, setPages] = useState<RenderedPage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  useEffect(() => {
+    setActivePageIndex((prev) => Math.min(prev, Math.max(0, pageCount - 1)));
+  }, [pageCount]);
 
   useEffect(() => {
     const controller = new AbortController();
     setIsLoading(true);
     setLoadError(null);
 
-    void loadRenderedPages(document, controller.signal)
-      .then((nextPages) => {
+    void loadRenderedPage(document, activePageIndex, controller.signal)
+      .then((nextPage) => {
         if (controller.signal.aborted) {
-          nextPages.forEach((page) => page.dispose?.());
+          nextPage.dispose?.();
           return;
         }
-        setPages((prevPages) => {
-          prevPages.forEach((page) => page.dispose?.());
-          return nextPages;
+        setPage((prevPage) => {
+          prevPage?.dispose?.();
+          return nextPage;
         });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setPages((prevPages) => {
-          prevPages.forEach((page) => page.dispose?.());
-          return [];
+        setPage((prevPage) => {
+          prevPage?.dispose?.();
+          return null;
         });
         setLoadError(
           error instanceof Error ? error.message : 'Failed to load document pages.'
@@ -74,7 +78,13 @@ export function ContractPdfPages({
     return () => {
       controller.abort();
     };
-  }, [document.pdfData, pageImages]);
+  }, [activePageIndex, document]);
+
+  useEffect(() => {
+    return () => {
+      page?.dispose?.();
+    };
+  }, [page]);
 
   if (loadError) {
     return (
@@ -84,13 +94,13 @@ export function ContractPdfPages({
     );
   }
 
-  if (isLoading && pages.length === 0) {
-    return <span style={{ padding: 8 }}>Loading pages…</span>;
+  if (isLoading && page === null) {
+    return <span style={{ padding: 8 }}>Loading page...</span>;
   }
 
   return (
     <ContractCanvasPages
-      pages={pages}
+      page={page}
       document={document}
       mode={mode}
       onDocumentChange={onDocumentChange}

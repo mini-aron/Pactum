@@ -4,7 +4,7 @@ import {
   validateField,
   validateSharedFieldGroup,
 } from '../src/validation';
-import type { TextField } from '../src/types/field';
+import type { SignatureField, TextField } from '../src/types/field';
 import type { ContractDocument } from '../src/types/document';
 
 const text: TextField = {
@@ -46,6 +46,17 @@ const source: TextField = {
   required: true,
 };
 
+const signature: SignatureField = {
+  id: 'sig1',
+  name: 'sig',
+  type: 'signature',
+  page: 0,
+  x: 0.1,
+  y: 0.1,
+  width: 0.2,
+  height: 0.1,
+};
+
 const doc = (fields: TextField[], fv = {}, sv = {}): ContractDocument => ({
   id: 'd',
   title: 'd',
@@ -83,5 +94,45 @@ describe('validation', () => {
     expect(r.valid).toBe(false);
     const r2 = validateDocument(doc([source, mirror], {}, { K: 'filled' }));
     expect(r2.valid).toBe(true);
+  });
+
+  it('validateDocument uses resolved default values for non-shared fields', () => {
+    const withDefault: TextField = {
+      ...text,
+      defaultValue: 'fallback',
+    };
+
+    const r = validateDocument(doc([withDefault], {}, {}));
+    expect(r.valid).toBe(true);
+  });
+
+  it('validateField rejects invalid regex patterns without throwing', () => {
+    const r = validateField(
+      {
+        ...text,
+        validation: { pattern: '(' },
+      },
+      'value'
+    );
+
+    expect(r.valid).toBe(false);
+    expect(r.errors[0]?.code).toBe('PATTERN_MISMATCH');
+  });
+
+  it('validateField rejects values incompatible with the field type', () => {
+    const r = validateField(text, true as never);
+    expect(r.valid).toBe(false);
+    expect(r.errors[0]?.code).toBe('INVALID_TYPE');
+  });
+
+  it('validateField rejects unsupported signature image formats', () => {
+    const r = validateField(signature, {
+      type: 'signature',
+      image: Uint8Array.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]),
+      mimeType: 'image/webp',
+    });
+
+    expect(r.valid).toBe(false);
+    expect(r.errors[0]?.code).toBe('INVALID_TYPE');
   });
 });

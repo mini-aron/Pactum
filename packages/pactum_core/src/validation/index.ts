@@ -9,8 +9,13 @@ import type {
   ValidationResult,
 } from '../types/validation';
 import type { ContractDocument } from '../types/document';
-import { isSignatureValue } from '../types/value';
+import {
+  getNormalizedSignatureImageMimeType,
+  isSignatureValue,
+} from '../types/value';
 import { resolveFieldValue } from '../shared';
+
+const MAX_SIGNATURE_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const makeError = (
   field: ContractField,
@@ -52,9 +57,25 @@ const validateStringValue = (
   }
 
   if (validation.pattern !== undefined) {
-    const regex = new RegExp(validation.pattern);
-    if (!regex.test(value)) {
-      errors.push(makeError(field, 'The value does not match the required format.', 'PATTERN_MISMATCH'));
+    try {
+      const regex = new RegExp(validation.pattern);
+      if (!regex.test(value)) {
+        errors.push(
+          makeError(
+            field,
+            'The value does not match the required format.',
+            'PATTERN_MISMATCH'
+          )
+        );
+      }
+    } catch {
+      errors.push(
+        makeError(
+          field,
+          'The field validation pattern is invalid.',
+          'PATTERN_MISMATCH'
+        )
+      );
     }
   }
 
@@ -108,6 +129,20 @@ export const validateField = (
     return { valid: true, errors: [] };
   }
 
+  if (
+    (field.type === 'checkbox' && typeof value !== 'boolean') ||
+    (field.type === 'number' &&
+      (typeof value !== 'number' || !Number.isFinite(value))) ||
+    (field.type === 'signature' && !isSignatureValue(value)) ||
+    (field.type !== 'checkbox' &&
+      field.type !== 'number' &&
+      field.type !== 'signature' &&
+      typeof value !== 'string')
+  ) {
+    errors.push(makeError(field, 'The value type is invalid for this field.', 'INVALID_TYPE'));
+    return { valid: false, errors };
+  }
+
   if (typeof value === 'string') {
     errors.push(...validateStringValue(field, value));
   } else if (typeof value === 'number') {
@@ -115,6 +150,24 @@ export const validateField = (
   } else if (isSignatureValue(value)) {
     if (!(value.image instanceof Uint8Array) || value.image.length === 0) {
       errors.push(makeError(field, 'Image data is invalid.', 'INVALID_TYPE'));
+    }
+    if (value.image.length > MAX_SIGNATURE_IMAGE_BYTES) {
+      errors.push(
+        makeError(
+          field,
+          `Image data must be ${Math.floor(MAX_SIGNATURE_IMAGE_BYTES / (1024 * 1024))} MB or smaller.`,
+          'INVALID_TYPE'
+        )
+      );
+    }
+    if (getNormalizedSignatureImageMimeType(value) === undefined) {
+      errors.push(
+        makeError(
+          field,
+          'Only PNG and JPEG signature images are allowed, and MIME type must match the image data.',
+          'INVALID_TYPE'
+        )
+      );
     }
   }
 
@@ -171,7 +224,7 @@ export const validateDocument = (
       );
       allErrors.push(...result.errors);
     } else {
-      const value = fieldValues[field.id];
+      const value = resolveFieldValue(field, fieldValues, sharedValues);
       const result = validateField(field, value);
       allErrors.push(...result.errors);
     }

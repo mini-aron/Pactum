@@ -107,4 +107,20 @@ describe('operations', () => {
     d = createField(d, textField({ id: 'ro', readonly: true }));
     expect(() => setFieldValue(d, 'ro', 'nope')).toThrow(/read-only/);
   });
+
+  it('createField rejects duplicate field ids', async () => {
+    let d = createDocument(await createTestDocumentInput());
+    d = createField(d, textField({ id: 'dup' }));
+
+    expect(() => createField(d, textField({ id: 'dup', x: 0.5 }))).toThrow(
+      /already exists/
+    );
+  });
+
+  it('setFieldValue rejects incompatible values for a field type', async () => {
+    let d = createDocument(await createTestDocumentInput());
+    d = createField(d, textField({ id: 'text_1' }));
+
+    expect(() => setFieldValue(d, 'text_1', true)).toThrow(/incompatible/);
+  });
 });

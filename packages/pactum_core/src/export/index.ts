@@ -8,10 +8,14 @@ import {
 import type { ContractDocument } from '../types/document';
 import type { ContractField } from '../types/field';
 import type { ContractFieldValue } from '../types/value';
-import { isSignatureValue } from '../types/value';
+import {
+  getNormalizedSignatureImageMimeType,
+  isSignatureValue,
+} from '../types/value';
 import { resolveFieldValue } from '../shared';
 import { toAbsoluteRect } from '../coordinates';
 import { formatDateValue } from '../format';
+import { validateField } from '../validation';
 
 interface PageDimension {
   readonly width: number;
@@ -80,11 +84,27 @@ const drawImageField = async (
 ): Promise<void> => {
   const abs = toAbsoluteRect(field, pageDim.width, pageDim.height);
   const y = pageDim.height - abs.y - abs.height;
+  const normalizedMimeType = getNormalizedSignatureImageMimeType(
+    mimeType !== undefined
+      ? {
+          type: 'signature',
+          image: imageData,
+          mimeType,
+        }
+      : {
+          type: 'signature',
+          image: imageData,
+        }
+  );
+
+  if (normalizedMimeType === undefined) {
+    throw new Error(
+      `Field "${field.id}" contains an unsupported signature image format for PDF export.`
+    );
+  }
 
   const isJpeg =
-    mimeType === 'image/jpeg' ||
-    mimeType === 'image/jpg' ||
-    (mimeType === undefined && imageData[0] === 0xff && imageData[1] === 0xd8);
+    normalizedMimeType === 'image/jpeg';
 
   const embeddedImage = isJpeg
     ? await pdfDoc.embedJpg(imageData)
@@ -146,10 +166,19 @@ const renderField = async (
 /** Reserved for future export options (e.g. custom fonts). Field text currently uses embedded Helvetica. */
 export type ExportOptions = Record<string, never>;
 
+const assertSourcePdf = (pdfData: Uint8Array): void => {
+  if (pdfData.byteLength > 0) return;
+
+  throw new Error(
+    'exportToPdf requires a non-empty source PDF in document.pdfData.'
+  );
+};
+
 export const exportToPdf = async (
   document: ContractDocument,
   _options: ExportOptions = {}
 ): Promise<Uint8Array> => {
+  assertSourcePdf(document.pdfData);
   const pdfDoc = await PDFDocument.load(document.pdfData);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
@@ -173,6 +202,12 @@ export const exportToPdf = async (
         document.fieldValues,
         document.sharedValues
       );
+      const result = validateField(field, value);
+      if (!result.valid) {
+        throw new Error(
+          `Field "${field.id}" is invalid for PDF export: ${result.errors[0]?.message ?? 'Unknown validation error.'}`
+        );
+      }
       await renderField(page, pdfDoc, field, value, font, pageDim);
     }
   }

@@ -4,6 +4,7 @@ import type {
   FieldValueMap,
   SharedValueMap,
 } from '../types/value';
+import { isSignatureValue } from '../types/value';
 import type { ContractDocument, CreateDocumentInput } from '../types/document';
 import { normalizeRect } from '../coordinates';
 import { resolveFieldValue, setSharedFieldValue } from '../shared';
@@ -24,6 +25,37 @@ const assertAtMostOneSourcePerSharedKey = (
   }
 };
 
+const assertUniqueFieldId = (
+  fields: readonly ContractField[],
+  fieldId: string
+): void => {
+  if (!fields.some((field) => field.id === fieldId)) return;
+
+  throw new Error(`Field ID "${fieldId}" already exists.`);
+};
+
+const isValueCompatibleWithField = (
+  field: ContractField,
+  value: ContractFieldValue
+): boolean => {
+  switch (field.type) {
+    case 'checkbox':
+      return typeof value === 'boolean';
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'signature':
+      return isSignatureValue(value);
+    case 'text':
+    case 'date':
+    case 'email':
+    case 'phone':
+    case 'textarea':
+      return typeof value === 'string';
+    default:
+      return false;
+  }
+};
+
 export const createDocument = (input: CreateDocumentInput): ContractDocument => ({
   ...input,
   fields: [],
@@ -37,6 +69,7 @@ export const createField = (
   document: ContractDocument,
   field: ContractField
 ): ContractDocument => {
+  assertUniqueFieldId(document.fields, field.id);
   const normalized = normalizeRect(field, document.pageCount);
   const newField: ContractField = { ...field, ...normalized };
 
@@ -148,6 +181,12 @@ export const setFieldValue = (
 
   if (field.readonly) {
     throw new Error(`Cannot set value on read-only field "${fieldId}".`);
+  }
+
+  if (!isValueCompatibleWithField(field, value)) {
+    throw new Error(
+      `Value for field "${fieldId}" is incompatible with field type "${field.type}".`
+    );
   }
 
   if (field.sharedKey && field.sharedMode === 'source') {

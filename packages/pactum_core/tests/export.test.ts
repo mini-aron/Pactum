@@ -17,4 +17,28 @@ describe('export', () => {
     const loaded = await PDFDocument.load(out);
     expect(loaded.getPageCount()).toBe(1);
   });
+
+  it('throws a clear error when document.pdfData is empty', async () => {
+    const input = await createTestDocumentInput();
+    const doc = createDocument({
+      ...input,
+      pdfData: new Uint8Array(),
+    });
+
+    await expect(exportToPdf(doc)).rejects.toThrow(
+      'exportToPdf requires a non-empty source PDF in document.pdfData.'
+    );
+  });
+
+  it('rejects invalid field values before PDF export', async () => {
+    const input = await createTestDocumentInput();
+    let doc = createDocument(input);
+    doc = createField(doc, textField({ id: 'f1' }));
+    doc = {
+      ...doc,
+      fieldValues: { f1: true as never },
+    };
+
+    await expect(exportToPdf(doc)).rejects.toThrow(/invalid for PDF export/i);
+  });
 });

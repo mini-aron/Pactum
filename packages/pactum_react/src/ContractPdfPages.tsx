@@ -20,34 +20,69 @@ export interface ContractPdfPagesProps {
 }
 
 export function ContractPdfPages({
+  file,
   document,
   mode,
   onDocumentChange,
   pageWidth = 720,
   zoom = 1,
 }: ContractPdfPagesProps): JSX.Element {
+  useEffect(() => {
+    if (file === undefined || file === null) return;
+    console.warn(
+      'ContractPdfPages ignores the deprecated "file" prop and renders from "document" instead.'
+    );
+  }, [file]);
+
   const pageImages =
     'pageImages' in document ? document.pageImages : undefined;
   const [pages, setPages] = useState<RenderedPage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    let alive = true;
+    const controller = new AbortController();
     setIsLoading(true);
-    void loadRenderedPages(document)
+    setLoadError(null);
+
+    void loadRenderedPages(document, controller.signal)
       .then((nextPages) => {
-        if (!alive) return;
-        setPages(nextPages);
+        if (controller.signal.aborted) {
+          nextPages.forEach((page) => page.dispose?.());
+          return;
+        }
+        setPages((prevPages) => {
+          prevPages.forEach((page) => page.dispose?.());
+          return nextPages;
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setPages((prevPages) => {
+          prevPages.forEach((page) => page.dispose?.());
+          return [];
+        });
+        setLoadError(
+          error instanceof Error ? error.message : 'Failed to load document pages.'
+        );
       })
       .finally(() => {
-        if (!alive) return;
+        if (controller.signal.aborted) return;
         setIsLoading(false);
       });
 
     return () => {
-      alive = false;
+      controller.abort();
     };
-  }, [pageImages, document.pdfData]);
+  }, [document.pdfData, pageImages]);
+
+  if (loadError) {
+    return (
+      <div role="alert" style={{ padding: 12, color: '#991b1b', fontSize: 13 }}>
+        Failed to load pages: {loadError}
+      </div>
+    );
+  }
 
   if (isLoading && pages.length === 0) {
     return <span style={{ padding: 8 }}>Loading pages…</span>;

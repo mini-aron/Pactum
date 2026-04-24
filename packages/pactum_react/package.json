@@ -38,7 +38,7 @@
     "prepack": "pnpm build",
     "prepublishOnly": "pnpm typecheck",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm typecheck",
+    "test": "vitest run",
     "clean": "rm -rf dist storybook-static",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
@@ -68,6 +68,7 @@
     "storybook": "^8.6.18",
     "typescript": "^5.4.5",
     "vite": "^5.2.11",
-    "vite-plugin-dts": "^3.9.1"
+    "vite-plugin-dts": "^3.9.1",
+    "vitest": "^2.1.9"
   }
 }

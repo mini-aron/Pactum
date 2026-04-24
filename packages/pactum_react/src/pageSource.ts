@@ -9,6 +9,12 @@ export interface RenderedPage {
   readonly dispose?: () => void;
 }
 
+const throwIfAborted = (signal?: AbortSignal): void => {
+  if (signal?.aborted) {
+    throw new DOMException('Page rendering aborted.', 'AbortError');
+  }
+};
+
 const detectImageMimeType = (bytes: Uint8Array): string => {
   if (bytes.length >= 8) {
     const isPng =
@@ -41,60 +47,107 @@ const detectImageMimeType = (bytes: Uint8Array): string => {
   return 'image/png';
 };
 
-const decodeImage = async (bytes: Uint8Array): Promise<RenderedPage> => {
+const decodeImage = async (
+  bytes: Uint8Array,
+  signal?: AbortSignal
+): Promise<RenderedPage> => {
+  throwIfAborted(signal);
   const mimeType = detectImageMimeType(bytes);
   const normalized = Uint8Array.from(bytes);
   const blob = new Blob([normalized], { type: mimeType });
   const objectUrl = URL.createObjectURL(blob);
-  const image = new Image();
-  image.decoding = 'async';
-  image.src = objectUrl;
-  await image.decode();
-  URL.revokeObjectURL(objectUrl);
+  try {
+    const image = new Image();
+    image.decoding = 'async';
+    image.src = objectUrl;
+    await image.decode();
+    throwIfAborted(signal);
 
-  return {
-    index: 0,
-    width: image.naturalWidth,
-    height: image.naturalHeight,
-    image,
-  };
+    return {
+      index: 0,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      image,
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 };
 
-const renderPdfPages = async (pdfData: Uint8Array): Promise<RenderedPage[]> => {
+const renderPdfPages = async (
+  pdfData: Uint8Array,
+  signal?: AbortSignal
+): Promise<RenderedPage[]> => {
+  throwIfAborted(signal);
   // pdf.js may transfer the underlying ArrayBuffer to the worker.
   // Use a fresh copy so the document model keeps an intact buffer for future renders.
   const loadingTask = pdfjs.getDocument({ data: Uint8Array.from(pdfData) });
-  const pdf = await loadingTask.promise;
-  const pages: RenderedPage[] = [];
+  const cancelLoading = () => {
+    void loadingTask.destroy();
+  };
+  signal?.addEventListener('abort', cancelLoading, { once: true });
 
-  for (let i = 1; i <= pdf.numPages; i += 1) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 2 });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(viewport.width));
-    canvas.height = Math.max(1, Math.round(viewport.height));
-    const context = canvas.getContext('2d');
-    if (!context) continue;
+  try {
+    const pdf = await loadingTask.promise;
+    const pages: RenderedPage[] = [];
 
-    await page.render({
-      canvasContext: context,
-      viewport,
-    }).promise;
+    try {
+      for (let i = 1; i <= pdf.numPages; i += 1) {
+        throwIfAborted(signal);
 
-    pages.push({
-      index: i - 1,
-      width: canvas.width,
-      height: canvas.height,
-      image: canvas,
-    });
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(viewport.width));
+        canvas.height = Math.max(1, Math.round(viewport.height));
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+          page.cleanup();
+          continue;
+        }
+
+        const renderTask = page.render({
+          canvasContext: context,
+          viewport,
+        });
+        const cancelRender = () => {
+          renderTask.cancel();
+        };
+        signal?.addEventListener('abort', cancelRender, { once: true });
+
+        try {
+          await renderTask.promise;
+          throwIfAborted(signal);
+        } finally {
+          signal?.removeEventListener('abort', cancelRender);
+          page.cleanup();
+        }
+
+        pages.push({
+          index: i - 1,
+          width: canvas.width,
+          height: canvas.height,
+          image: canvas,
+          dispose: () => {
+            canvas.width = 0;
+            canvas.height = 0;
+          },
+        });
+      }
+
+      return pages;
+    } finally {
+      await pdf.destroy();
+    }
+  } finally {
+    signal?.removeEventListener('abort', cancelLoading);
   }
-
-  await pdf.destroy();
-  return pages;
 };
 
 export const loadRenderedPages = async (
-  documentModel: ContractDocument
+  documentModel: ContractDocument,
+  signal?: AbortSignal
 ): Promise<RenderedPage[]> => {
   const pageImages =
     'pageImages' in documentModel
@@ -108,13 +161,13 @@ export const loadRenderedPages = async (
   if (pageImages && pageImages.length > 0) {
     const decoded = await Promise.all(
       pageImages.map(async (bytes: Uint8Array, index: number) => {
-        const page = await decodeImage(bytes);
+        const page = await decodeImage(bytes, signal);
         return { ...page, index };
       })
     );
     return decoded;
   }
 
-  return renderPdfPages(documentModel.pdfData);
+  return renderPdfPages(documentModel.pdfData, signal);
 };
 

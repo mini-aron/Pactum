@@ -117,6 +117,7 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
   } | null>(null);
   const [pages, setPages] = useState<RenderedPage[]>([]);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
+  const [pageLoadError, setPageLoadError] = useState<string | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
   const panRef = useRef({
@@ -204,23 +205,40 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
   );
 
   useEffect(() => {
-    let alive = true;
+    const controller = new AbortController();
     setIsLoadingPages(true);
+    setPageLoadError(null);
 
-    void loadRenderedPages(document)
+    void loadRenderedPages(document, controller.signal)
       .then((nextPages) => {
-        if (!alive) return;
-        setPages(nextPages);
+        if (controller.signal.aborted) {
+          nextPages.forEach((page) => page.dispose?.());
+          return;
+        }
+        setPages((prevPages) => {
+          prevPages.forEach((page) => page.dispose?.());
+          return nextPages;
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setPages((prevPages) => {
+          prevPages.forEach((page) => page.dispose?.());
+          return [];
+        });
+        setPageLoadError(
+          error instanceof Error ? error.message : 'Failed to load document pages.'
+        );
       })
       .finally(() => {
-        if (!alive) return;
+        if (controller.signal.aborted) return;
         setIsLoadingPages(false);
       });
 
     return () => {
-      alive = false;
+      controller.abort();
     };
-  }, [pageImages, document.pdfData]);
+  }, [document.pdfData, pageImages]);
 
   const basePageWidth = pageWidth ?? 720;
   const scaledPageWidth = Math.round(basePageWidth * zoom);
@@ -409,6 +427,14 @@ export const ContractViewer = forwardRef<ContractViewerHandle, ContractViewerPro
           overscrollBehavior: 'contain',
         }}
       >
+        {pageLoadError ? (
+          <div
+            role="alert"
+            style={{ padding: 12, color: '#991b1b', fontSize: 13 }}
+          >
+            Failed to load pages: {pageLoadError}
+          </div>
+        ) : null}
         {isLoadingPages && pages.length === 0 ? (
           <span style={{ padding: 8 }}>Loading pages…</span>
         ) : (

@@ -6,13 +6,13 @@ Pactum documentation is organized by language.
 
 | Document | Description |
 | --- | --- |
-| [Library Usage](en/USAGE.md) | API usage, return examples, field types, validation output, PDF export, and React viewer integration |
+| [Library Usage](en/USAGE.md) | API usage, field types, runtime validation rules, PDF export, and React viewer integration |
 
 ## Korean
 
 | 문서 | 설명 |
 | --- | --- |
-| [라이브러리 사용법](ko/USAGE.md) | API 사용법, 반환 예시, 필드 타입, 검증 결과, PDF export, React viewer 연동 |
+| [라이브러리 사용 가이드](ko/USAGE.md) | API 사용법, 필드 타입, 런타임 검증 규칙, PDF export, React viewer 연동 |
 
 ## Project
 

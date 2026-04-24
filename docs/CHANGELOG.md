@@ -19,4 +19,10 @@ and this project follows [Semantic Versioning](https://semver.org/).
 
 - Field styling options expanded (`textSize`, `borderRadius`)
 - Viewer rendering architecture updated to normalize page sources
+- PDF viewer worker configuration now requires an explicit local/managed worker URL instead of a remote CDN default
+- README and usage docs now state that `document.pdfData` is required for export and PDF fallback rendering
+
+### Added
+
+- Basic CI workflow for install, typecheck, test, and build on Windows and Ubuntu
 

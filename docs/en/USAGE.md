@@ -1,13 +1,14 @@
-# Pactum Library Usage
+# Pactum Usage Guide
 
-This guide documents the main APIs in `@pactum-labs/core` and `@pactum-labs/react`, including example code, return shapes, field types, validation output, and React viewer integration.
+This guide covers the current public usage of `@pactum-labs/core` and `@pactum-labs/react`.
+It reflects the runtime rules enforced by the library today.
 
 ## Packages
 
 | Package | Purpose |
 | --- | --- |
-| `@pactum-labs/core` | Document model, field operations, shared field rules, validation, and PDF export |
-| `@pactum-labs/react` | React contract viewer, canvas page rendering, field overlays, builder/fill/sign/readonly modes |
+| `@pactum-labs/core` | Immutable document model, field operations, validation, shared values, and PDF export |
+| `@pactum-labs/react` | React viewer for rendering one contract page at a time with field overlays |
 
 ## Install
 
@@ -15,11 +16,9 @@ This guide documents the main APIs in `@pactum-labs/core` and `@pactum-labs/reac
 pnpm add @pactum-labs/core @pactum-labs/react
 ```
 
-`@pactum-labs/react` uses `react` and `react-dom` as peer dependencies.
+`@pactum-labs/react` expects `react` and `react-dom` as peer dependencies.
 
-## Core Quick Start
-
-`createDocument` creates an empty contract document model. Core operations do not mutate the original object. They return the next `ContractDocument`.
+## Quick Start
 
 ```ts
 import {
@@ -27,14 +26,14 @@ import {
   createField,
   setFieldValue,
   validateDocument,
-  getResolvedValues,
+  exportToPdf,
   type ContractDocument,
 } from '@pactum-labs/core';
 
 let document: ContractDocument = createDocument({
   id: 'contract-001',
   title: 'Employment Contract',
-  pdfData: pdfBytes,
+  pdfData,
   pageImages: [pageImageBytes],
   pageCount: 1,
   pages: [{ index: 0, width: 612, height: 792 }],
@@ -43,101 +42,39 @@ let document: ContractDocument = createDocument({
 document = createField(document, {
   id: 'employeeName',
   name: 'Employee Name',
-  label: 'Employee',
   type: 'text',
   page: 0,
   x: 0.1,
   y: 0.2,
   width: 0.35,
   height: 0.05,
-  placeholder: 'Enter employee name',
   required: true,
-  validation: {
-    minLength: 2,
-    maxLength: 40,
-  },
 });
 
 document = createField(document, {
-  id: 'startDate',
-  name: 'Start Date',
-  type: 'date',
-  dateFormat: 'yyyy.mm.dd',
+  id: 'employeeSignature',
+  name: 'Employee Signature',
+  type: 'signature',
+  signatureMode: 'all',
   page: 0,
   x: 0.1,
-  y: 0.28,
-  width: 0.25,
-  height: 0.05,
+  y: 0.72,
+  width: 0.35,
+  height: 0.12,
+  required: true,
 });
 
 document = setFieldValue(document, 'employeeName', 'Ada Lovelace');
-document = setFieldValue(document, 'startDate', '2026-04-22');
 
 const validation = validateDocument(document);
-const values = getResolvedValues(document);
+if (!validation.valid) {
+  console.log(validation.errors);
+}
+
+const pdfBytes = await exportToPdf(document);
 ```
 
-### Return Example
-
-```ts
-validation;
-// {
-//   valid: true,
-//   errors: []
-// }
-
-values;
-// {
-//   employeeName: 'Ada Lovelace',
-//   startDate: '2026-04-22'
-// }
-
-document;
-// {
-//   id: 'contract-001',
-//   title: 'Employment Contract',
-//   pdfData: Uint8Array,
-//   pageImages: [Uint8Array],
-//   pageCount: 1,
-//   pages: [{ index: 0, width: 612, height: 792 }],
-//   fields: [
-//     {
-//       id: 'employeeName',
-//       name: 'Employee Name',
-//       label: 'Employee',
-//       type: 'text',
-//       page: 0,
-//       x: 0.1,
-//       y: 0.2,
-//       width: 0.35,
-//       height: 0.05,
-//       placeholder: 'Enter employee name',
-//       required: true,
-//       validation: { minLength: 2, maxLength: 40 }
-//     },
-//     {
-//       id: 'startDate',
-//       name: 'Start Date',
-//       type: 'date',
-//       dateFormat: 'yyyy.mm.dd',
-//       page: 0,
-//       x: 0.1,
-//       y: 0.28,
-//       width: 0.25,
-//       height: 0.05
-//     }
-//   ],
-//   fieldValues: {
-//     employeeName: 'Ada Lovelace',
-//     startDate: '2026-04-22'
-//   },
-//   sharedValues: {},
-//   createdAt: '2026-04-22T...',
-//   updatedAt: '2026-04-22T...'
-// }
-```
-
-## Document Shape
+## Core Model
 
 ```ts
 interface ContractDocument {
@@ -153,133 +90,77 @@ interface ContractDocument {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
-
-interface PageInfo {
-  readonly index: number;
-  readonly width: number;
-  readonly height: number;
-}
 ```
 
-When `pageImages` is present, the React viewer renders image-backed pages first. `pdfData` is still required because it is used by PDF export and by the PDF rendering fallback.
+`pdfData` is always required. `pageImages` is optional, but when present the React viewer uses it before falling back to PDF rendering.
 
 ## Coordinates
 
-Field geometry uses normalized coordinates, so the same document model can render against different page display sizes.
+Field geometry is normalized to page size.
 
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `page` | `number` | Zero-based page index |
-| `x` | `number` | Horizontal position from the left edge, from `0` to `1` |
-| `y` | `number` | Vertical position from the top edge, from `0` to `1` |
-| `width` | `number` | Width as a ratio of page width |
-| `height` | `number` | Height as a ratio of page height |
+| Field | Meaning |
+| --- | --- |
+| `page` | Zero-based page index |
+| `x` | Left position from `0` to `1` |
+| `y` | Top position from `0` to `1` |
+| `width` | Width ratio of the page |
+| `height` | Height ratio of the page |
 
-For example, `x: 0.1` and `width: 0.35` means the field starts at 10% from the left edge and occupies 35% of the page width. `createField`, `updateField`, `moveField`, and `resizeField` normalize geometry into the page bounds.
-
-```ts
-import { toAbsoluteRect, toNormalizedRect } from '@pactum-labs/core';
-
-const abs = toAbsoluteRect(
-  { page: 0, x: 0.1, y: 0.2, width: 0.35, height: 0.05 },
-  612,
-  792
-);
-
-// { x: 61.2, y: 158.4, width: 214.2, height: 39.6 }
-
-const normalized = toNormalizedRect(
-  { page: 0, x: 61.2, y: 158.4, width: 214.2, height: 39.6 },
-  612,
-  792
-);
-
-// { page: 0, x: 0.1, y: 0.2, width: 0.35, height: 0.05 }
-```
+`createField`, `updateField`, `moveField`, and `resizeField` clamp geometry into page bounds.
 
 ## Field Types
 
-Common fields are shared by every `ContractField`.
+Common field properties:
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | `string` | Yes | Unique field ID |
-| `name` | `string` | Yes | Internal and accessible field name |
-| `type` | `ContractFieldType` | Yes | Field type |
-| `page` | `number` | Yes | Zero-based page index |
-| `x` | `number` | Yes | Normalized x coordinate |
-| `y` | `number` | Yes | Normalized y coordinate |
-| `width` | `number` | Yes | Normalized width |
-| `height` | `number` | Yes | Normalized height |
-| `label` | `string` | No | Viewer label. Falls back to `name` |
-| `textSize` | `number` | No | Text size for display and input |
-| `borderRadius` | `number` | No | Viewer field box radius |
-| `required` | `boolean` | No | Whether the field must be filled |
-| `placeholder` | `string` | No | Input placeholder |
-| `readonly` | `boolean` | No | Prevents value changes |
-| `hidden` | `boolean` | No | Excludes the field from PDF export rendering |
-| `defaultValue` | `unknown` | No | Fallback value when no direct value exists |
-| `validation` | `FieldValidation` | No | Validation rules |
-| `sharedKey` | `string` | No | Shared field group key |
-| `sharedMode` | `'source' \| 'mirror'` | No | Shared field source/mirror mode |
+| Field | Type |
+| --- | --- |
+| `id` | `string` |
+| `name` | `string` |
+| `type` | `ContractFieldType` |
+| `page` | `number` |
+| `x` | `number` |
+| `y` | `number` |
+| `width` | `number` |
+| `height` | `number` |
+| `label` | `string` |
+| `textSize` | `number` |
+| `borderRadius` | `number` |
+| `required` | `boolean` |
+| `placeholder` | `string` |
+| `readonly` | `boolean` |
+| `hidden` | `boolean` |
+| `defaultValue` | `unknown` |
+| `validation` | `FieldValidation` |
+| `sharedKey` | `string` |
+| `sharedMode` | `'source' \| 'mirror'` |
 
-Type-specific fields:
+Supported field types:
 
-| Type | Value Type | Extra Fields | Notes |
-| --- | --- | --- | --- |
-| `text` | `string` | `maxLength?: number` | Single-line text |
-| `textarea` | `string` | `maxLength?: number`, `rows?: number` | Multi-line text |
-| `date` | `string` | `dateFormat?: string` | Stored as `yyyy-mm-dd`; formatted when rendered/exported |
-| `checkbox` | `boolean` | None | Draws a check mark when `true` |
-| `signature` | `SignatureValue` | `signatureMode?: 'all' \| 'sign-only' \| 'stamp-only'` | Drawn signature or stamp image |
-| `email` | `string` | None | Viewer input type is `email` |
-| `phone` | `string` | None | Viewer input type is `tel` |
-| `number` | `number` | `min?: number`, `max?: number`, `step?: number` | Numeric input and numeric validation |
+| Type | Runtime value |
+| --- | --- |
+| `text` | `string` |
+| `textarea` | `string` |
+| `date` | `string` in `yyyy-mm-dd` form |
+| `checkbox` | `boolean` |
+| `signature` | `SignatureValue` |
+| `email` | `string` |
+| `phone` | `string` |
+| `number` | `number` |
 
-### Field Examples
+`field.id` must be unique inside a document.
 
-```ts
-const textField = {
-  id: 'companyName',
-  name: 'Company Name',
-  type: 'text',
-  page: 0,
-  x: 0.12,
-  y: 0.18,
-  width: 0.4,
-  height: 0.045,
-  required: true,
-  maxLength: 80,
-} as const;
+## Runtime Value Rules
 
-const numberField = {
-  id: 'salary',
-  name: 'Salary',
-  type: 'number',
-  page: 0,
-  x: 0.12,
-  y: 0.26,
-  width: 0.24,
-  height: 0.045,
-  min: 0,
-  max: 1000000,
-  step: 1000,
-} as const;
+Pactum enforces value compatibility at runtime.
 
-const signatureField = {
-  id: 'employeeSignature',
-  name: 'Employee Signature',
-  type: 'signature',
-  signatureMode: 'all',
-  page: 0,
-  x: 0.12,
-  y: 0.72,
-  width: 0.35,
-  height: 0.12,
-} as const;
-```
+- `text`, `textarea`, `date`, `email`, and `phone` accept only strings.
+- `number` accepts only finite numbers.
+- `checkbox` accepts only booleans.
+- `signature` accepts only signature objects.
+- Mirror fields reject direct writes.
+- Readonly fields reject writes and clears.
 
-## Value Types
+Signature images are restricted to PNG and JPEG. MIME type and image bytes must agree.
 
 ```ts
 interface SignatureValue {
@@ -290,174 +171,55 @@ interface SignatureValue {
   readonly width?: number;
   readonly height?: number;
 }
-
-type ContractFieldValue =
-  | string
-  | number
-  | boolean
-  | SignatureValue;
-
-type FieldValueMap = Record<string, ContractFieldValue>;
-type SharedValueMap = Record<string, ContractFieldValue>;
-```
-
-Signature or stamp value example:
-
-```ts
-document = setFieldValue(document, 'employeeSignature', {
-  type: 'signature',
-  source: 'stamp',
-  image: stampPngBytes,
-  mimeType: 'image/png',
-});
-
-// document.fieldValues.employeeSignature
-// {
-//   type: 'signature',
-//   source: 'stamp',
-//   image: Uint8Array,
-//   mimeType: 'image/png'
-// }
 ```
 
 ## Operations
 
-| Function | Return | Description |
-| --- | --- | --- |
-| `createDocument(input)` | `ContractDocument` | Creates an empty document |
-| `createField(document, field)` | `ContractDocument` | Adds a field |
-| `updateField(document, fieldId, patch)` | `ContractDocument` | Updates field properties. `id` and `type` cannot be patched |
-| `removeField(document, fieldId)` | `ContractDocument` | Removes a field and its direct value |
-| `moveField(document, fieldId, position)` | `ContractDocument` | Moves a field |
-| `resizeField(document, fieldId, size)` | `ContractDocument` | Resizes a field |
-| `setFieldValue(document, fieldId, value)` | `ContractDocument` | Sets a field value |
-| `clearFieldValue(document, fieldId)` | `ContractDocument` | Clears a field value |
-| `getResolvedFieldValue(document, fieldId)` | `ContractFieldValue \| undefined` | Reads one field value, including shared values and defaults |
-| `getResolvedValues(document)` | `FieldValueMap` | Reads all resolved field values |
+| Function | Description |
+| --- | --- |
+| `createDocument(input)` | Create an empty document |
+| `createField(document, field)` | Add a field |
+| `updateField(document, fieldId, patch)` | Update field properties except `id` and `type` |
+| `removeField(document, fieldId)` | Remove a field and its direct value |
+| `moveField(document, fieldId, position)` | Move a field |
+| `resizeField(document, fieldId, size)` | Resize a field |
+| `setFieldValue(document, fieldId, value)` | Set a field value |
+| `clearFieldValue(document, fieldId)` | Clear a field value |
+| `getResolvedFieldValue(document, fieldId)` | Read one resolved field value |
+| `getResolvedValues(document)` | Read all resolved field values |
 
-`setFieldValue` and `clearFieldValue` throw for mirror fields and readonly fields. When a shared source field is set, `sharedValues` is updated instead of `fieldValues`.
-
-```ts
-document = createField(document, {
-  id: 'partyNameSource',
-  name: 'Party Name Source',
-  type: 'text',
-  page: 0,
-  x: 0.1,
-  y: 0.15,
-  width: 0.35,
-  height: 0.05,
-  sharedKey: 'partyName',
-  sharedMode: 'source',
-});
-
-document = createField(document, {
-  id: 'partyNameMirror',
-  name: 'Party Name Mirror',
-  type: 'text',
-  page: 0,
-  x: 0.1,
-  y: 0.25,
-  width: 0.35,
-  height: 0.05,
-  sharedKey: 'partyName',
-  sharedMode: 'mirror',
-});
-
-document = setFieldValue(document, 'partyNameSource', 'Pactum Inc.');
-
-document.sharedValues;
-// { partyName: 'Pactum Inc.' }
-
-getResolvedFieldValue(document, 'partyNameMirror');
-// 'Pactum Inc.'
-```
+Shared source fields write into `sharedValues`. Mirror fields read the shared value through resolution.
 
 ## Validation
 
 ```ts
-import { validateField, validateDocument } from '@pactum-labs/core';
+import { validateDocument } from '@pactum-labs/core';
 
 const result = validateDocument(document);
-
-if (!result.valid) {
-  console.log(result.errors);
-}
 ```
 
-Return type:
+Validation covers:
 
-```ts
-interface ValidationResult {
-  readonly valid: boolean;
-  readonly errors: readonly FieldValidationError[];
-}
+- required values
+- string min and max length
+- number min and max
+- regex pattern matching
+- invalid runtime value types
+- invalid signature image format
+- missing shared source fields
 
-interface FieldValidationError {
-  readonly fieldId: string;
-  readonly fieldName: string;
-  readonly message: string;
-  readonly code: ValidationErrorCode;
-}
-
-type ValidationErrorCode =
-  | 'REQUIRED'
-  | 'PATTERN_MISMATCH'
-  | 'MIN_LENGTH'
-  | 'MAX_LENGTH'
-  | 'MIN_VALUE'
-  | 'MAX_VALUE'
-  | 'INVALID_TYPE'
-  | 'MIRROR_CANNOT_SET_VALUE'
-  | 'SHARED_SOURCE_NOT_FOUND';
-```
-
-Failure example:
-
-```ts
-const result = validateDocument(document);
-
-// {
-//   valid: false,
-//   errors: [
-//     {
-//       fieldId: 'employeeName',
-//       fieldName: 'Employee Name',
-//       message: 'This field is required.',
-//       code: 'REQUIRED'
-//     }
-//   ]
-// }
-```
-
-`FieldValidation` supports string and number rules.
-
-```ts
-type FieldValidation = {
-  pattern?: string;
-  minLength?: number;
-  maxLength?: number;
-  min?: number;
-  max?: number;
-  customMessage?: string;
-};
-```
+If `validation.pattern` is an invalid regex, validation returns an error instead of throwing.
 
 ## Date Formatting
 
-Date fields use the native date input value, so the stored value is `yyyy-mm-dd`. `dateFormat` is applied in the viewer and during PDF export.
+Date fields store values as `yyyy-mm-dd`.
+`dateFormat` affects viewer display and PDF export.
 
 ```ts
-import { formatDateValue, isIsoDateString } from '@pactum-labs/core';
+import { formatDateValue } from '@pactum-labs/core';
 
 formatDateValue('2026-04-22', 'yyyy.mm.dd');
 // '2026.04.22'
-
-formatDateValue('2026-04-22', 'yy.M.d');
-// '26.4.22'
-
-isIsoDateString('2026-04-22');
-// true
 ```
 
 Supported tokens are `yyyy`, `yy`, `MM`/`mm`, `M`/`m`, `dd`, and `d`.
@@ -467,19 +229,20 @@ Supported tokens are `yyyy`, `yy`, `MM`/`mm`, `M`/`m`, `dd`, and `d`.
 ```ts
 import { exportToPdf } from '@pactum-labs/core';
 
-const completedPdfBytes = await exportToPdf(document);
-
-// completedPdfBytes: Uint8Array
+const pdfBytes = await exportToPdf(document);
 ```
 
-PDF export loads `document.pdfData` as the source PDF and draws each field's resolved value on the matching page. Fields with `hidden: true` are not rendered into the exported PDF.
+Export loads `document.pdfData` and draws each resolved field value onto the matching page.
+
+- `hidden: true` fields are skipped.
+- Invalid field values fail export early.
+- Signature export supports PNG and JPEG only.
 
 ## React Viewer
 
 ```tsx
 import { useState } from 'react';
 import { ContractViewer } from '@pactum-labs/react';
-import type { ContractDocument } from '@pactum-labs/core';
 
 function ContractScreen({ initialDocument }: { initialDocument: ContractDocument }) {
   const [document, setDocument] = useState(initialDocument);
@@ -491,6 +254,7 @@ function ContractScreen({ initialDocument }: { initialDocument: ContractDocument
       onDocumentChange={setDocument}
       pageWidth={900}
       viewportHeight="80vh"
+      showPageNavigation
     />
   );
 }
@@ -498,25 +262,33 @@ function ContractScreen({ initialDocument }: { initialDocument: ContractDocument
 
 ### Viewer Props
 
-| Prop | Type | Required | Description |
-| --- | --- | --- | --- |
-| `mode` | `'builder' \| 'fill' \| 'sign' \| 'readonly'` | Yes | Viewer interaction mode |
-| `document` | `ContractDocument` | Yes | Document model to render |
-| `onDocumentChange` | `(next: ContractDocument) => void` | Yes | Called when fields or values change |
-| `pageWidth` | `number` | No | Base displayed page width. Default is `720` |
-| `viewportHeight` | `number \| string` | No | Viewer height. Default is `'80vh'` |
-| `pdfWorkerSrc` | `string` | No | pdf.js worker URL |
-| `className` | `string` | No | Root class name |
-| `style` | `CSSProperties` | No | Root inline style |
-
-### Modes
-
-| Mode | Behavior |
+| Prop | Description |
 | --- | --- |
-| `builder` | Drag-create, move, resize, and delete fields |
-| `fill` | Fill normal fields such as text, date, checkbox, and number |
-| `sign` | Fill normal fields and add signatures or stamps |
-| `readonly` | Disable value input and field editing |
+| `mode` | `builder`, `fill`, `sign`, or `readonly` |
+| `document` | Document model to render |
+| `onDocumentChange` | Called when fields or values change |
+| `pageWidth` | Base rendered page width. Default `720` |
+| `viewportHeight` | Viewer height. Default `'80vh'` |
+| `showPageNavigation` | Show previous/next page controls in the top toolbar. Default `false` |
+| `pdfWorkerSrc` | Explicit pdf.js worker path when PDF rendering is needed |
+| `className` | Root class name |
+| `style` | Root inline style |
+
+### Viewer Behavior
+
+- The viewer renders one page surface inside the viewport.
+- Built-in page navigation buttons are hidden by default.
+- The viewport supports scroll, zoom, and pan.
+- Builder mode supports drag-create, move, resize, and delete.
+- Sign mode supports drawing signatures or uploading stamp images based on `signatureMode`.
+
+If your document depends on PDF-backed rendering, configure the pdf.js worker explicitly:
+
+```ts
+import { configurePdfWorker } from '@pactum-labs/react';
+
+configurePdfWorker('/pdf.worker.min.mjs');
+```
 
 ### Viewer Ref API
 
@@ -530,23 +302,13 @@ viewerRef.current?.beginDragCreate('text', {
   placeholder: 'Enter employee name',
 });
 
-viewerRef.current?.beginDragCreate('date', {
-  dateFormat: 'yyyy.mm.dd',
-});
-
 viewerRef.current?.cancelDragCreate();
+viewerRef.current?.goToPage(2);
+viewerRef.current?.nextPage();
+viewerRef.current?.previousPage();
 ```
 
-```tsx
-<ContractViewer
-  ref={viewerRef}
-  mode="builder"
-  document={document}
-  onDocumentChange={setDocument}
-/>
-```
-
-External code can inject signature and stamp images.
+Image injection:
 
 ```ts
 viewerRef.current?.setSignatureImage('employeeSignature', {
@@ -555,121 +317,13 @@ viewerRef.current?.setSignatureImage('employeeSignature', {
 });
 
 viewerRef.current?.setStampImage('employeeSignature', {
-  image: stampPngBytes,
-  mimeType: 'image/png',
-});
-
-viewerRef.current?.setFieldImage('employeeSignature', {
-  source: 'stamp',
-  image: stampPngBytes,
-  mimeType: 'image/png',
+  image: stampJpegBytes,
+  mimeType: 'image/jpeg',
 });
 ```
 
-Image input types:
+The viewer keeps single-page rendering, so page navigation is expected to come from your own outer UI through the ref API.
 
-```ts
-interface ContractViewerBinaryImageInput {
-  readonly image: Uint8Array | ArrayBuffer;
-  readonly mimeType?: string;
-  readonly width?: number;
-  readonly height?: number;
-}
+## Lower-Level React Exports
 
-interface ContractViewerImageInput extends ContractViewerBinaryImageInput {
-  readonly source?: 'draw' | 'stamp';
-}
-```
-
-When `signatureMode` is `sign-only`, stamp injection is rejected. When it is `stamp-only`, draw injection is rejected.
-
-## Complete Example
-
-```tsx
-import { useRef, useState } from 'react';
-import {
-  createDocument,
-  createField,
-  setFieldValue,
-  validateDocument,
-  exportToPdf,
-  type ContractDocument,
-} from '@pactum-labs/core';
-import {
-  ContractViewer,
-  type ContractViewerHandle,
-} from '@pactum-labs/react';
-
-function createInitialDocument(pdfData: Uint8Array): ContractDocument {
-  let document = createDocument({
-    id: 'contract-001',
-    title: 'Employment Contract',
-    pdfData,
-    pageCount: 1,
-    pages: [{ index: 0, width: 612, height: 792 }],
-  });
-
-  document = createField(document, {
-    id: 'employeeName',
-    name: 'Employee Name',
-    type: 'text',
-    page: 0,
-    x: 0.1,
-    y: 0.2,
-    width: 0.35,
-    height: 0.05,
-    required: true,
-  });
-
-  document = createField(document, {
-    id: 'employeeSignature',
-    name: 'Employee Signature',
-    type: 'signature',
-    signatureMode: 'all',
-    page: 0,
-    x: 0.1,
-    y: 0.74,
-    width: 0.35,
-    height: 0.1,
-    required: true,
-  });
-
-  return setFieldValue(document, 'employeeName', 'Ada Lovelace');
-}
-
-export function ContractApp({ pdfData }: { pdfData: Uint8Array }) {
-  const [document, setDocument] = useState(() => createInitialDocument(pdfData));
-  const viewerRef = useRef<ContractViewerHandle>(null);
-
-  const onExport = async () => {
-    const validation = validateDocument(document);
-    if (!validation.valid) {
-      console.log(validation.errors);
-      return;
-    }
-
-    const pdfBytes = await exportToPdf(document);
-    console.log(pdfBytes);
-  };
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => viewerRef.current?.beginDragCreate('text')}
-      >
-        Add text field
-      </button>
-      <button type="button" onClick={onExport}>
-        Export PDF
-      </button>
-      <ContractViewer
-        ref={viewerRef}
-        mode="sign"
-        document={document}
-        onDocumentChange={setDocument}
-      />
-    </>
-  );
-}
-```
+`@pactum-labs/react` also exports `ContractCanvasPages`, `ContractPdfPages`, `FieldBox`, `configurePdfWorker`, `getDocumentPageCount`, and `loadRenderedPage` for custom integrations.

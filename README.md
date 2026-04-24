@@ -75,10 +75,10 @@ import { createDocument, createField } from '@pactum-labs/core';
 const document = createDocument({
   id: 'doc-1',
   title: 'Employment Contract',
-  pdfData: new Uint8Array(), // optional compatibility source
+  pdfData: pdfBytes, // required source PDF used by export and PDF fallback rendering
   pageCount: 1,
   pages: [{ index: 0, width: 612, height: 792 }],
-  pageImages: [new Uint8Array()], // preferred source (one page image per item)
+  pageImages: [pageImageBytes], // optional viewer optimization (one page image per item)
 });
 
 const next = createField(document, {
@@ -129,6 +129,7 @@ function Viewer({
       onDocumentChange={onChange}
       pageWidth={900}
       viewportHeight="80vh"
+      showPageNavigation
     />
   );
 }
@@ -188,6 +189,8 @@ viewerRef.current?.beginDragCreate('date', {
 
 Date fields use the native date picker and store the selected value as `yyyy-mm-dd`. When `dateFormat` is set, the viewer and PDF export render the selected date in that format. Supported date tokens are `yyyy`, `yy`, `mm`/`MM`, and `dd`.
 
+When rendering PDF-backed pages, configure the pdf.js worker explicitly. Pactum does not fetch a default worker from a remote CDN.
+
 When `signatureMode` is set, UI input and external API writes are both constrained:
 - `sign-only`: drawing only
 - `stamp-only`: image upload/injection only
@@ -196,6 +199,7 @@ When `signatureMode` is set, UI input and external API writes are both constrain
 ## Viewer Behavior
 
 - Zoom by top controls (`-`, reset `%`, `+`)
+- Optional page navigation controls can be shown beside the zoom toolbar with `showPageNavigation`
 - Drag to pan when content is scrollable
 - Scroll inside the viewer viewport (container does not expand to full document height)
 - Fields stay aligned to page coordinates
